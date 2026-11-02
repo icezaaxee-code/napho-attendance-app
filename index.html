@@ -384,6 +384,9 @@
     };
   </script>
   <script>
+    // ==========================================
+    // 📌 GLOBAL VARIABLES & INITIAL STATES
+    // ==========================================
     var allStudentsData = [];
     var currentFilteredStudents = [];
     var rawAnalyticsRecords = [];
@@ -393,25 +396,37 @@
     var selectedEditDay = "", selectedEditHour = "", selectedEditClass = "";
     var activeModalStudentName = "";
 
-    window.onload = function() {
-      google.script.run.withSuccessHandler(initClassDropdowns).getStudentListAll('all');
-      google.script.run.withSuccessHandler(function(data){ dbSchedule = data; }).getScheduleData();
-      
-      var today = new Date();
-      var yyyy = today.getFullYear();
-      var mm = String(today.getMonth() + 1).padStart(2, '0');
-      var dd = String(today.getDate()).padStart(2, '0');
-      var todayStr = `${yyyy}-${mm}-${dd}`;
-
+    // ==========================================
+    // ⏰ DATE & CLOCK MANAGEMENT
+    // ==========================================
+    function updateDateDisplay(dObj) {
       var dateInput = document.getElementById('checkDateInput');
-      dateInput.value = todayStr;
+      var val = dateInput ? dateInput.value : '';
       
-      // 📌 ตั้งค่าห้ามเลือกวันที่ในอนาคต (Max Date = วันนี้)
-      dateInput.setAttribute('max', todayStr);
-
-      updateDateDisplay(today);
-      autoSelectSessionByTime();
-    };
+      // ป้องกัน Error: ถ้าไม่ได้ส่ง dObj เข้ามา ให้ดึงจากช่อง Input หรือวันปัจจุบัน
+      if (!dObj) {
+        dObj = val ? new Date(val) : new Date();
+      }
+      
+      var dayName = dObj.toLocaleDateString('th-TH', { weekday: 'long' });
+      var dateNum = dObj.getDate();
+      var monthYearStr = dObj.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+      
+      // ดึงเวลาปัจจุบันมาแสดงสด
+      var now = new Date();
+      var timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      var displayElem = document.getElementById('currentDateDisplay');
+      if (displayElem) {
+        displayElem.innerText = `${dayName}ที่ ${dateNum} ${monthYearStr} | ⏰ ${timeStr} น.`;
+      }
+      
+      var days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+      var daySelectElem = document.getElementById('daySelect');
+      if (daySelectElem && dObj.getDay() >= 1 && dObj.getDay() <= 5) {
+        daySelectElem.value = days[dObj.getDay()];
+      }
+    }
 
     function autoSelectSessionByTime() {
       const now = new Date();
@@ -443,55 +458,40 @@
         sessionValue = "เข้าแถวเช้า";
       }
 
-      document.getElementById('sessionSelect').value = sessionValue;
+      var sessionElem = document.getElementById('sessionSelect');
+      if (sessionElem) sessionElem.value = sessionValue;
     }
 
-    // 📌 ฟังก์ชันอัปเดตป้ายวันที่และนาฬิกาเดินสดแบบ Real-time
-function updateDateDisplay() {
-  var val = document.getElementById('checkDateInput').value;
-  var dObj = val ? new Date(val) : new Date();
-  
-  var dayName = dObj.toLocaleDateString('th-TH', { weekday: 'long' });
-  var dateNum = dObj.getDate();
-  var monthYearStr = dObj.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-  
-  // ดึงเวลาปัจจุบันมาแสดงสด
-  var now = new Date();
-  var timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  
-  document.getElementById('currentDateDisplay').innerText = `${dayName}ที่ ${dateNum} ${monthYearStr} | ⏰ ${timeStr} น.`;
-  
-  var days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
-  if (dObj.getDay() >= 1 && dObj.getDay() <= 5) {
-    document.getElementById('daySelect').value = days[dObj.getDay()];
-  }
-}
+    // ==========================================
+    // 🚀 SINGLE WINDOW.ONLOAD (จุดเดียวในระบบ)
+    // ==========================================
+    window.onload = function() {
+      // 1. ดึงรายชื่อและตารางเรียนผ่าน API Bridge
+      google.script.run.withSuccessHandler(initClassDropdowns).getStudentListAll('all');
+      google.script.run.withSuccessHandler(function(data){ dbSchedule = data; }).getScheduleData();
+      
+      // 2. กำหนดวันที่ปัจจุบันใน Input
+      var today = new Date();
+      var yyyy = today.getFullYear();
+      var mm = String(today.getMonth() + 1).padStart(2, '0');
+      var dd = String(today.getDate()).padStart(2, '0');
+      var todayStr = `${yyyy}-${mm}-${dd}`;
 
-// 📌 ฟังก์ชันเริ่มต้นระบบ และสั่งให้นาฬิกาทำงานทุก 1 วินาที
-window.onload = function() {
-  google.script.run.withSuccessHandler(initClassDropdowns).getStudentListAll('all');
-  google.script.run.withSuccessHandler(function(data){ dbSchedule = data; }).getScheduleData();
-  
-  var today = new Date();
-  var yyyy = today.getFullYear();
-  var mm = String(today.getMonth() + 1).padStart(2, '0');
-  var dd = String(today.getDate()).padStart(2, '0');
-  var todayStr = `${yyyy}-${mm}-${dd}`;
+      var dateInput = document.getElementById('checkDateInput');
+      if (dateInput) {
+        dateInput.value = todayStr;
+        dateInput.setAttribute('max', todayStr); // ป้องกันเลือกวันอนาคต
+      }
 
-  var dateInput = document.getElementById('checkDateInput');
-  dateInput.value = todayStr;
-  
-  // 📌 ตั้งค่าห้ามเลือกวันที่ในอนาคต (Max Date = วันนี้)
-  dateInput.setAttribute('max', todayStr);
+      // 3. เรียกใช้นาฬิกาและเลือกคาบเรียนอัตโนมัติ
+      updateDateDisplay(today);
+      setInterval(function() { updateDateDisplay(); }, 1000); // อัปเดตสดทุก 1 วินาที
+      autoSelectSessionByTime();
+    };
 
-  updateDateDisplay();
-  
-  // ⏰ เรียกอัปเดตนาฬิกาเดินสดทุก 1 วินาที (1,000 milliseconds)
-  setInterval(updateDateDisplay, 1000);
-  
-  autoSelectSessionByTime();
-};
-
+    // ==========================================
+    // 📝 EVENT HANDLERS & NAVIGATION
+    // ==========================================
     function onDateOrSessionChange() {
       var val = document.getElementById('checkDateInput').value;
       if (val) {
@@ -509,13 +509,13 @@ window.onload = function() {
       var anaSel = document.getElementById('analysisClassSelect');
       var schSel = document.getElementById('scheduleClassSelect');
       
-      classSel.innerHTML = '<option value="" selected disabled>-- เลือกระดับชั้นเรียน --</option>';
+      if (classSel) classSel.innerHTML = '<option value="" selected disabled>-- เลือกระดับชั้นเรียน --</option>';
       uniqueRooms.forEach(function(room) {
         if(room) {
           var opt = '<option value="' + room + '">ชั้น ' + room + '</option>';
-          classSel.innerHTML += opt;
-          anaSel.innerHTML += opt;
-          schSel.innerHTML += opt;
+          if (classSel) classSel.innerHTML += opt;
+          if (anaSel) anaSel.innerHTML += opt;
+          if (schSel) schSel.innerHTML += opt;
         }
       });
     }
@@ -584,7 +584,6 @@ window.onload = function() {
       google.script.run.withSuccessHandler(function(existingMap) {
         let html = '';
         currentFilteredStudents.forEach((s, i) => {
-          // 📌 หากยังไม่มีการเช็คชื่อ ให้ Default เป็น "มา" อัตโนมัติ ถ้ามีประวัติเดิมค่อยดึงค่าเดิมมาแสดง
           let savedStatus = existingMap[s.name] || existingMap[s.id] || 'มา';
           
           html += `<div class="student-card">
@@ -632,7 +631,9 @@ window.onload = function() {
       }).saveUnifiedAttendance(dataToSave);
     }
 
-    // ANALYTICS CENTER
+    // ==========================================
+    // 📊 ANALYTICS FUNCTIONS
+    // ==========================================
     function switchAnalyticsView(viewType) {
       currentAnalyticsSubView = viewType;
       renderAnalyticsView();
@@ -654,15 +655,10 @@ window.onload = function() {
       const area = document.getElementById('analyticsResultArea');
       if (!rawAnalyticsRecords) { area.innerHTML = '<div class="loading">📄 ไม่มีข้อมูล</div>'; return; }
       
-      if (currentAnalyticsSubView === 'room') {
-        renderRoomAnalytics(area);
-      } else if (currentAnalyticsSubView === 'subject') {
-        renderSubjectAnalytics(area);
-      } else if (currentAnalyticsSubView === 'person') {
-        renderPersonAnalytics(area);
-      } else if (currentAnalyticsSubView === 'discipline') {
-        renderDisciplineRiskAnalytics(area);
-      }
+      if (currentAnalyticsSubView === 'room') renderRoomAnalytics(area);
+      else if (currentAnalyticsSubView === 'subject') renderSubjectAnalytics(area);
+      else if (currentAnalyticsSubView === 'person') renderPersonAnalytics(area);
+      else if (currentAnalyticsSubView === 'discipline') renderDisciplineRiskAnalytics(area);
     }
 
     function renderRoomAnalytics(container) {
@@ -1072,7 +1068,9 @@ window.onload = function() {
       document.body.removeChild(link);
     }
 
-    // SCHEDULE TABLE
+    // ==========================================
+    // 📅 SCHEDULE TABLE FUNCTIONS
+    // ==========================================
     function renderScheduleTable() {
       const cls = document.getElementById('scheduleClassSelect').value;
       const area = document.getElementById('scheduleResultArea');
@@ -1152,7 +1150,6 @@ window.onload = function() {
       }).saveScheduleData(pwd, selectedEditDay, selectedEditClass, selectedEditHour, subj);
     }
 
-    // 📦 ฟังก์ชันดาวน์โหลดสำรองข้อมูล Excel (.xlsx) ทุกชีต พร้อม Auto-fit ความกว้างตารางตามข้อความจริง
     function downloadBackupAdmin() {
       var pwd = document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
@@ -1163,43 +1160,30 @@ window.onload = function() {
         const allSheets = res.data;
         const wb = XLSX.utils.book_new();
 
-        // วนลูปสร้างแท็บแยกตามชื่อชีตจริงใน Google Sheets
         for (let sheetName in allSheets) {
           let sheetData = allSheets[sheetName];
           let ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-          // 📌 อัลกอริทึมค้นหาข้อความที่ยาวที่สุดในแต่ละคอลัมน์เพื่อปรับขนาดอัตโนมัติ
           if (sheetData && sheetData.length > 0) {
             let colWidths = sheetData[0].map((_, colIndex) => {
-              let maxLen = 10; // กำหนดความกว้างขั้นต่ำ 10 ตัวอักษร
-
+              let maxLen = 10;
               sheetData.forEach(row => {
                 let cellVal = row[colIndex] ? row[colIndex].toString() : "";
-                
-                // แปลงความยาวตัวอักษรไทย/สัญลักษณ์ให้คำนวณขนาดพิกเซลได้แม่นยำขึ้น
                 let currentLen = cellVal.replace(/[^\x00-\x7F]/g, "  ").length; 
-                
-                if (currentLen > maxLen) {
-                  maxLen = currentLen; // บันทึกความยาวของข้อความที่ยาวที่สุดในคอลัมน์นี้
-                }
+                if (currentLen > maxLen) maxLen = currentLen;
               });
-
-              return { wch: maxLen + 4 }; // เพิ่ม Padding เว้นระยะขอบอีก 4 ตัวอักษรให้ดูสบายตา
+              return { wch: maxLen + 4 };
             });
-
-            ws['!cols'] = colWidths; // กำหนดความกว้างคอลัมน์ลงในแท็บชีต
+            ws['!cols'] = colWidths;
           }
-
           XLSX.utils.book_append_sheet(wb, ws, sheetName);
         }
 
-        // ดาวน์โหลดไฟล์ Excel (.xlsx)
         XLSX.writeFile(wb, `BACKUP_FULL_NAPHO_${new Date().toISOString().slice(0,10)}.xlsx`);
-        alert("📦 สำรองข้อมูลทุกแท็บชีต (Excel .xlsx) พร้อมปรับขนาดตารางให้อัตโนมัติสำเร็จแล้ว!");
+        alert("📦 สำรองข้อมูลทุกแท็บชีต (Excel .xlsx) สำเร็จแล้ว!");
       }).getAllSheetsBackupData(pwd);
     }
 
-    // 📥 ฟังก์ชันอ่านไฟล์ Excel (.xlsx, .xls) หรือ CSV แล้วส่งไป Restore กลับเข้า Google Sheets
     function uploadRestoreAdmin() {
       var pwd = document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
@@ -1216,31 +1200,24 @@ window.onload = function() {
       reader.onload = function(e) {
         var data = new Uint8Array(e.target.result);
         var workbook = XLSX.read(data, { type: 'array' });
-
-        // อ่านข้อมูลจากชีตชื่อ 'Attendance' หรือชีตแรกสุด
         var sheetName = workbook.SheetNames.includes('Attendance') ? 'Attendance' : workbook.SheetNames[0];
         var worksheet = workbook.Sheets[sheetName];
-        
-        // แปลงข้อมูลเป็น 2D Array
         var rowsData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         google.script.run.withSuccessHandler(function(res) {
           alert(res.msg);
-          if (res.success) {
-            fileInput.value = ""; // ล้างค่าช่องเลือกไฟล์
-          }
+          if (res.success) fileInput.value = "";
         }).restoreAttendanceData(pwd, rowsData);
       };
 
       reader.readAsArrayBuffer(file);
     }
 
-    // 🗑️ ฟังก์ชันลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน (Admin)
     function clearOldDataAdmin() {
       var pwd = document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
 
-      if (!confirm("⚠️ คำเตือน: คุณแน่ใจหรือไม่ที่จะลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน?\n(แนะนำให้กด 'สำรองข้อมูล' เก็บไว้ก่อนทำการลบครับ)")) {
+      if (!confirm("⚠️ คำเตือน: คุณแน่ใจหรือไม่ที่จะลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน?")) {
         return;
       }
 
@@ -1248,5 +1225,6 @@ window.onload = function() {
         alert(res.msg);
       }).deleteAttendanceOlderThanSixMonths(pwd);
     }
+  </script>
 </body>
 </html>
