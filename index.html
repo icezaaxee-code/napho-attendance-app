@@ -3,34 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบเช็คชื่อ โรงเรียนบ้านนาโพธิ์</title>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   
-  <!-- 📦 SheetJS -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- 📌 1. ตั้งชื่อ Web App บนหน้าจอโฮม iOS -->
-  <meta name="apple-mobile-web-app-title" content="เช็คชื่อนาโพธิ์">
+  <!-- 📌 1. แท็ก iOS Home Screen (ต้องอยู่บนสุด) -->
+  <meta name="apple-mobile-web-app-title" content="เช็คชื่อ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <!-- 📌 2. แท็กบังคับรูปภาพสำหรับ Web App / iOS Home Screen (ใส่ ?v=3 ดักแคช) -->
-  <link rel="apple-touch-icon" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
-  <link rel="apple-touch-icon" sizes="152x152" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
-  <link rel="apple-touch-icon" sizes="180x180" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
-  <link rel="apple-touch-icon-precomposed" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
+  <!-- 📌 2. ไอคอนสำหรับ iOS (บังคับเรียกรูปพื้นหลังทึบโดยตรง) -->
+  <link rel="apple-touch-icon" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png">
+  <link rel="apple-touch-icon-precomposed" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png">
 
-  <!-- 📌 3. แท็กพรีวิว Social & Open Graph สำหรับ Safari Share Sheet -->
-  <meta property="og:title" content="ระบบเช็คชื่อ โรงเรียนบ้านนาโพธิ์">
-  <meta property="og:image" content="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
-  <meta property="og:image:width" content="500">
-  <meta property="og:image:height" content="500">
-
-  <!-- 📌 4. Favicon ทั่วไป -->
-  <link rel="icon" type="image/png" sizes="192x192" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
-  <link rel="shortcut icon" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png?v=3">
+  <!-- 📌 3. แท็กสำหรับ Favicon บนคอมพิวเตอร์ -->
+  <link rel="icon" type="image/png" sizes="192x192" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png">
+  <link rel="shortcut icon" href="https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png">
+  
+  <title>ระบบเช็คชื่อ โรงเรียนบ้านนาโพธิ์</title>
 
   <style>
     :root {
