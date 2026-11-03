@@ -154,17 +154,17 @@
           </div>
           <div class="col-6">
             <select id="sessionSelect" onchange="onDateOrSessionChange()">
-  <option value="เข้าแถวเช้า">🌅 เข้าแถวเช้า</option>
-  <option value="คาบ 1">คาบ 1 (08.40)</option>
-  <option value="คาบ 2">คาบ 2 (09.30)</option>
-  <option value="คาบ 3">คาบ 3 (10.20)</option>
-  <option value="คาบ 4">คาบ 4 (11.10)</option>
-  <option value="เข้าแถวเที่ยง">☀️ เข้าแถวเที่ยง</option>
-  <option value="คาบ 5">คาบ 5 (13.00)</option>
-  <option value="คาบ 6">คาบ 6 (13.50)</option>
-  <option value="คาบ 7">คาบ 7 (14.40)</option>
-  <option value="เข้าแถวเย็น">🌆 เข้าแถวเย็น</option>
-</select>
+              <option value="เข้าแถวเช้า">🌅 เข้าแถวเช้า</option>
+              <option value="คาบ 1">คาบ 1 (08.40)</option>
+              <option value="คาบ 2">คาบ 2 (09.30)</option>
+              <option value="คาบ 3">คาบ 3 (10.20)</option>
+              <option value="คาบ 4">คาบ 4 (11.10)</option>
+              <option value="เข้าแถวเที่ยง">☀️ เข้าแถวเที่ยง</option>
+              <option value="คาบ 5">คาบ 5 (13.00)</option>
+              <option value="คาบ 6">คาบ 6 (13.50)</option>
+              <option value="คาบ 7">คาบ 7 (14.40)</option>
+              <option value="เข้าแถวเย็น">🌆 เข้าแถวเย็น</option>
+            </select>
           </div>
         </div>
         
@@ -246,7 +246,7 @@
       </div>
     </div>
 
-    <!-- 🔑 ปุ่มเข้าสู่ระบบ Admin ด้านล่างสุดของหน้าเว็บ (เปิดหน้าสำรองข้อมูล) -->
+    <!-- 🔑 ปุ่มเข้าสู่ระบบ Admin ด้านล่างสุดของหน้าเว็บ -->
     <div class="text-center mt-4 mb-3">
       <button class="btn btn-sm btn-outline-secondary opacity-75" onclick="openAdminModalForBackup()">
         <i class="bi bi-shield-lock-fill me-1"></i> เข้าสู่ระบบจัดการ Admin (สำรองข้อมูล)
@@ -275,71 +275,83 @@
     </div>
   </div>
 
-  <!-- 🔑 Modal จัดการระบบ Admin (ปรับแยก 2 โหมด) -->
+  <!-- 🔑 Modal จัดการระบบ Admin (รองรับ Password Autofill + บันทึกตารางเรียนทีเดียว 7 คาบ) -->
   <div class="modal fade" id="adminScheduleModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content" style="background:#1e293b; color:#fff; border-radius:16px;">
-        <div class="modal-header border-secondary">
-          <h6 class="modal-title fw-bold" id="adminModalTitle">
-            <i class="bi bi-shield-lock-fill text-warning me-2"></i> ระบบจัดการ Admin
-          </h6>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="password" id="adminPassword" class="mb-3 text-center" placeholder="🔑 ใส่รหัสผ่าน Admin">
-          
-          <!-- 📌 1. โหมดแก้ไขตารางเรียน -->
-          <div id="adminEditScheduleArea" style="display:none;">
-            <div class="p-2 mb-3 rounded bg-dark border border-secondary text-center">
-              <span class="text-info fw-bold" id="editModalTargetText">วัน... | คาบ...</span>
-            </div>
-            <input type="text" id="adminSubject" placeholder="ป้อนชื่อวิชาใหม่ (หากเว้นว่างไว้จะเป็นการลบวิชา)" class="mb-3">
-            <button class="btn btn-primary w-100 fw-bold mb-2" onclick="saveScheduleAdmin()">
-              💾 บันทึกการเปลี่ยนแปลงตารางเรียน
-            </button>
+        
+        <!-- ใช้ฟอร์มมาตรฐานเพื่อให้ Chrome / Safari เด้งจำรหัสผ่าน -->
+        <form id="adminForm" onsubmit="event.preventDefault(); submitAdminAction();">
+          <div class="modal-header border-secondary">
+            <h6 class="modal-title fw-bold" id="adminModalTitle">
+              <i class="bi bi-shield-lock-fill text-warning me-2"></i> ระบบจัดการ Admin
+            </h6>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
           </div>
+          
+          <div class="modal-body">
+            <!-- Username ล่องหนสำหรับช่วย Browser Autofill Password -->
+            <input type="text" name="username" value="admin" autocomplete="username" style="display:none;">
 
-          <!-- 📌 2. โหมดสำรองข้อมูล & Restore & ลบข้อมูล 6 เดือน -->
-          <div id="adminBackupArea" style="display:none;">
-            <div class="alert alert-dark border-secondary p-2 mb-3 text-center small text-white-50">
-              จัดการสำรองข้อมูล นำเข้าข้อมูล และล้างประวัติการเช็คชื่อ
+            <div id="adminPasswordGroup" class="mb-3">
+              <label class="form-label text-warning small fw-bold"><i class="bi bi-key-fill me-1"></i> รหัสผ่าน Admin:</label>
+              <input type="password" id="adminPassword" name="password" autocomplete="current-password" class="text-center fw-bold" placeholder="🔑 ใส่รหัสผ่าน Admin">
             </div>
             
-            <button class="btn btn-warning w-100 fw-bold text-dark mb-3" onclick="downloadBackupAdmin()">
-              <i class="bi bi-box-seam-fill me-1"></i> สำรองข้อมูลการเช็คชื่อทั้งหมด (Backup Excel)
-            </button>
+            <!-- 📌 1. โหมดแก้ไขตารางเรียน (กรอกครบ 7 คาบแล้วกดบันทึกทีเดียว) -->
+            <div id="adminEditScheduleArea" style="display:none;">
+              <div class="p-2 mb-3 rounded bg-dark border border-secondary text-center">
+                <span class="text-info fw-bold" id="editModalTargetText">ชั้น... | วัน...</span>
+              </div>
 
-            <hr class="border-secondary">
+              <div id="scheduleBatchInputsGroup">
+                <!-- ช่องป้อนวิชา 7 คาบจะถูกเรนเดอร์ผ่าน JS -->
+              </div>
 
-            <!-- โซน Restore อัปโหลดไฟล์ Excel / CSV -->
-            <div class="mb-3 text-start">
-              <label class="form-label text-info fw-bold small mb-1">
-                <i class="bi bi-file-earmark-arrow-up me-1"></i> นำเข้าไฟล์สำรอง (.xlsx, .xls, .csv):
-              </label>
-              <input type="file" id="restoreFileInput" accept=".xlsx, .xls, .csv" class="form-control form-control-sm bg-dark text-white border-secondary mb-2">
-              <button class="btn btn-outline-info w-100 fw-bold" onclick="uploadRestoreAdmin()">
-                📥 นำเข้าข้อมูลกลับคืนระบบ (Restore)
+              <button type="submit" class="btn btn-primary w-100 fw-bold mt-2 mb-2">
+                💾 บันทึกตารางเรียนทั้งหมด
               </button>
             </div>
 
-            <hr class="border-secondary">
+            <!-- 📌 2. โหมดสำรองข้อมูล & Restore & ลบข้อมูล 6 เดือน -->
+            <div id="adminBackupArea" style="display:none;">
+              <div class="alert alert-dark border-secondary p-2 mb-3 text-center small text-white-50">
+                จัดการสำรองข้อมูล นำเข้าข้อมูล และล้างประวัติการเช็คชื่อ
+              </div>
+              
+              <button type="button" class="btn btn-warning w-100 fw-bold text-dark mb-3" onclick="downloadBackupAdmin()">
+                <i class="bi bi-box-seam-fill me-1"></i> สำรองข้อมูลการเช็คชื่อทั้งหมด (Backup Excel)
+              </button>
 
-            <button class="btn btn-outline-danger w-100 fw-bold" onclick="clearOldDataAdmin()">
-              <i class="bi bi-trash3-fill me-1"></i> ลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน
-            </button>
+              <hr class="border-secondary">
+
+              <div class="mb-3 text-start">
+                <label class="form-label text-info fw-bold small mb-1">
+                  <i class="bi bi-file-earmark-arrow-up me-1"></i> นำเข้าไฟล์สำรอง (.xlsx, .xls, .csv):
+                </label>
+                <input type="file" id="restoreFileInput" accept=".xlsx, .xls, .csv" class="form-control form-control-sm bg-dark text-white border-secondary mb-2">
+                <button type="button" class="btn btn-outline-info w-100 fw-bold" onclick="uploadRestoreAdmin()">
+                  📥 นำเข้าข้อมูลกลับคืนระบบ (Restore)
+                </button>
+              </div>
+
+              <hr class="border-secondary">
+
+              <button type="button" class="btn btn-outline-danger w-100 fw-bold" onclick="clearOldDataAdmin()">
+                <i class="bi bi-trash3-fill me-1"></i> ลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน
+              </button>
+            </div>
           </div>
-        </div>
+        </form>
+
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // 📌 วาง Web App URL จาก Apps Script ของคุณที่นี่
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxNdz-phXryVhkMtnZqwbsv-2Ged7nZlbv4llpmXN4xLyHxsJrRnM3GgAaeGVYR5-22/exec"; // <-- แก้ลิงก์ของคุณตรงนี้
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxNdz-phXryVhkMtnZqwbsv-2Ged7nZlbv4llpmXN4xLyHxsJrRnM3GgAaeGVYR5-22/exec";
 
-    // 🌉 Bridge แปลง google.script.run เป็น API Fetch สำหรับ Vercel
     const google = {
       script: {
         run: {
@@ -376,6 +388,7 @@
           saveUnifiedAttendance: function(dataToSave) { this._callApi('saveUnifiedAttendance', dataToSave); },
           getAnalyticsRawData: function(className, timeFilter) { this._callApi('getAnalyticsRawData', { className, timeFilter }); },
           saveScheduleData: function(pwd, day, cls, hour, subj) { this._callApi('saveScheduleData', { password: pwd, day, cls, hour, subject: subj }); },
+          saveDailyScheduleData: function(pwd, day, cls, scheduleObj) { this._callApi('saveDailyScheduleData', { password: pwd, day, cls, scheduleObj }); },
           getAllSheetsBackupData: function(pwd) { this._callApi('getAllSheetsBackupData', { password: pwd }); },
           restoreAttendanceData: function(pwd, rowsData) { this._callApi('restoreAttendanceData', { password: pwd, rowsData }); },
           deleteAttendanceOlderThanSixMonths: function(pwd) { this._callApi('deleteAttendanceOlderThanSixMonths', { password: pwd }); }
@@ -396,6 +409,11 @@
     var selectedEditDay = "", selectedEditHour = "", selectedEditClass = "";
     var activeModalStudentName = "";
 
+    // 📌 ตัวแปรจำสิทธิ์ Admin ล็อกอินครั้งเดียวค้างไว้ในหน้านี้
+    var isAdminLoggedIn = false;
+    var currentAdminPassword = "";
+    var currentAdminMode = "schedule"; // "schedule" หรือ "backup"
+
     // ==========================================
     // ⏰ DATE & CLOCK MANAGEMENT
     // ==========================================
@@ -403,7 +421,6 @@
       var dateInput = document.getElementById('checkDateInput');
       var val = dateInput ? dateInput.value : '';
       
-      // ป้องกัน Error: ถ้าไม่ได้ส่ง dObj เข้ามา ให้ดึงจากช่อง Input หรือวันปัจจุบัน
       if (!dObj) {
         dObj = val ? new Date(val) : new Date();
       }
@@ -412,7 +429,6 @@
       var dateNum = dObj.getDate();
       var monthYearStr = dObj.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
       
-      // ดึงเวลาปัจจุบันมาแสดงสด
       var now = new Date();
       var timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
@@ -463,14 +479,12 @@
     }
 
     // ==========================================
-    // 🚀 SINGLE WINDOW.ONLOAD (จุดเดียวในระบบ)
+    // 🚀 SINGLE WINDOW.ONLOAD
     // ==========================================
     window.onload = function() {
-      // 1. ดึงรายชื่อและตารางเรียนผ่าน API Bridge
       google.script.run.withSuccessHandler(initClassDropdowns).getStudentListAll('all');
       google.script.run.withSuccessHandler(function(data){ dbSchedule = data; }).getScheduleData();
       
-      // 2. กำหนดวันที่ปัจจุบันใน Input
       var today = new Date();
       var yyyy = today.getFullYear();
       var mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -480,12 +494,11 @@
       var dateInput = document.getElementById('checkDateInput');
       if (dateInput) {
         dateInput.value = todayStr;
-        dateInput.setAttribute('max', todayStr); // ป้องกันเลือกวันอนาคต
+        dateInput.setAttribute('max', todayStr);
       }
 
-      // 3. เรียกใช้นาฬิกาและเลือกคาบเรียนอัตโนมัติ
       updateDateDisplay(today);
-      setInterval(function() { updateDateDisplay(); }, 1000); // อัปเดตสดทุก 1 วินาที
+      setInterval(function() { updateDateDisplay(); }, 1000);
       autoSelectSessionByTime();
     };
 
@@ -1093,12 +1106,12 @@
         html += `<tr><td class="fw-bold text-info">${day}</td>`;
         for(let i = 1; i <= 4; i++) {
           let subj = (dbSchedule[day] && dbSchedule[day][cls] && dbSchedule[day][cls][i]) ? dbSchedule[day][cls][i] : "-";
-          html += `<td class="cell-editable" onclick="clickToEditSubject('${day}', '${cls}', '${i}', '${subj}')">${subj}</td>`;
+          html += `<td class="cell-editable" onclick="clickToEditSubject('${day}', '${cls}')">${subj}</td>`;
         }
         html += `<td class="lunch-cell"></td>`;
         for(let i = 5; i <= 7; i++) {
           let subj = (dbSchedule[day] && dbSchedule[day][cls] && dbSchedule[day][cls][i]) ? dbSchedule[day][cls][i] : "-";
-          html += `<td class="cell-editable" onclick="clickToEditSubject('${day}', '${cls}', '${i}', '${subj}')">${subj}</td>`;
+          html += `<td class="cell-editable" onclick="clickToEditSubject('${day}', '${cls}')">${subj}</td>`;
         }
         html += `</tr>`;
       });
@@ -1107,15 +1120,34 @@
     }
 
     // ==========================================
-    // 🔑 ADMIN CONTROLS, BACKUP & RESTORE
+    // 🔑 ADMIN CONTROLS (Single Sign-on & Persistent Login)
     // ==========================================
-    function clickToEditSubject(day, cls, hour, currentSubj) {
-      selectedEditDay = day; selectedEditClass = cls; selectedEditHour = hour;
+    function clickToEditSubject(day, cls) {
+      currentAdminMode = "schedule";
+      selectedEditDay = day; 
+      selectedEditClass = cls;
       
       document.getElementById('adminModalTitle').innerHTML = '<i class="bi bi-pencil-square text-warning me-2"></i> แก้ไขตารางเรียน (Admin)';
-      document.getElementById('editModalTargetText').innerText = `ชั้น ${cls} | วัน${day} | คาบที่ ${hour}`;
-      document.getElementById('adminSubject').value = currentSubj === "-" ? "" : currentSubj;
-      document.getElementById('adminPassword').value = "";
+      document.getElementById('editModalTargetText').innerText = `ชั้น ${cls} | วัน${day}`;
+      
+      // สร้างช่องกรอกวิชาทั้ง 7 คาบ
+      let inputsHtml = "";
+      for (let i = 1; i <= 7; i++) {
+        let existingSubj = (dbSchedule[day] && dbSchedule[day][cls] && dbSchedule[day][cls][i]) ? dbSchedule[day][cls][i] : "";
+        inputsHtml += `<div class="mb-2 text-start">
+                        <label class="form-label small text-muted mb-0">คาบที่ ${i}:</label>
+                        <input type="text" id="adminSubject_คาบ_${i}" value="${existingSubj}" placeholder="ป้อนชื่อวิชา (เว้นว่าง = ไม่มีเรียน)" class="form-control form-control-sm bg-dark text-white border-secondary">
+                       </div>`;
+      }
+      document.getElementById('scheduleBatchInputsGroup').innerHTML = inputsHtml;
+
+      // ตรวจสอบสถานะการล็อกอิน Admin ค้างไว้
+      if (isAdminLoggedIn) {
+        document.getElementById('adminPasswordGroup').style.display = 'none';
+      } else {
+        document.getElementById('adminPasswordGroup').style.display = 'block';
+        document.getElementById('adminPassword').value = "";
+      }
       
       document.getElementById('adminEditScheduleArea').style.display = 'block';
       document.getElementById('adminBackupArea').style.display = 'none';
@@ -1125,8 +1157,15 @@
     }
 
     function openAdminModalForBackup() {
+      currentAdminMode = "backup";
       document.getElementById('adminModalTitle').innerHTML = '<i class="bi bi-box-seam-fill text-warning me-2"></i> สำรองข้อมูลระบบ (Admin)';
-      document.getElementById('adminPassword').value = "";
+      
+      if (isAdminLoggedIn) {
+        document.getElementById('adminPasswordGroup').style.display = 'none';
+      } else {
+        document.getElementById('adminPasswordGroup').style.display = 'block';
+        document.getElementById('adminPassword').value = "";
+      }
       
       document.getElementById('adminEditScheduleArea').style.display = 'none';
       document.getElementById('adminBackupArea').style.display = 'block';
@@ -1135,27 +1174,45 @@
       adminModal.show();
     }
 
-    function saveScheduleAdmin() {
-      var pwd = document.getElementById('adminPassword').value;
-      var subj = document.getElementById('adminSubject').value.trim();
+    // ฟังก์ชันยิงข้อมูลเมื่อกด Submit ในฟอร์ม Admin
+    function submitAdminAction() {
+      if (currentAdminMode === "schedule") {
+        saveScheduleAdminBatch();
+      }
+    }
 
-      if(!pwd) { alert("กรุณากรอกรหัสผ่าน Admin"); return; }
+    function saveScheduleAdminBatch() {
+      var pwd = isAdminLoggedIn ? currentAdminPassword : document.getElementById('adminPassword').value;
+      if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin"); return; }
+
+      var scheduleObj = {};
+      for (let i = 1; i <= 7; i++) {
+        var val = document.getElementById(`adminSubject_คาบ_${i}`).value.trim();
+        scheduleObj[i] = val;
+      }
 
       google.script.run.withSuccessHandler(function(res) {
         alert(res.msg);
         if (res.success) {
+          // ล็อกอินสำเร็จ: บันทึกสถานะไว้ตลอดการเปิดหน้านี้
+          isAdminLoggedIn = true;
+          currentAdminPassword = pwd;
+          
           adminModal.hide();
           google.script.run.withSuccessHandler(function(data){ dbSchedule = data; renderScheduleTable(); }).getScheduleData();
         }
-      }).saveScheduleData(pwd, selectedEditDay, selectedEditClass, selectedEditHour, subj);
+      }).saveDailyScheduleData(pwd, selectedEditDay, selectedEditClass, scheduleObj);
     }
 
     function downloadBackupAdmin() {
-      var pwd = document.getElementById('adminPassword').value;
+      var pwd = isAdminLoggedIn ? currentAdminPassword : document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
 
       google.script.run.withSuccessHandler(function(res) {
         if (!res.success) { alert(res.msg); return; }
+
+        isAdminLoggedIn = true;
+        currentAdminPassword = pwd;
 
         const allSheets = res.data;
         const wb = XLSX.utils.book_new();
@@ -1185,7 +1242,7 @@
     }
 
     function uploadRestoreAdmin() {
-      var pwd = document.getElementById('adminPassword').value;
+      var pwd = isAdminLoggedIn ? currentAdminPassword : document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
 
       var fileInput = document.getElementById('restoreFileInput');
@@ -1206,7 +1263,11 @@
 
         google.script.run.withSuccessHandler(function(res) {
           alert(res.msg);
-          if (res.success) fileInput.value = "";
+          if (res.success) {
+            isAdminLoggedIn = true;
+            currentAdminPassword = pwd;
+            fileInput.value = "";
+          }
         }).restoreAttendanceData(pwd, rowsData);
       };
 
@@ -1214,7 +1275,7 @@
     }
 
     function clearOldDataAdmin() {
-      var pwd = document.getElementById('adminPassword').value;
+      var pwd = isAdminLoggedIn ? currentAdminPassword : document.getElementById('adminPassword').value;
       if (!pwd) { alert("กรุณากรอกรหัสผ่าน Admin เพื่อยืนยันสิทธิ์"); return; }
 
       if (!confirm("⚠️ คำเตือน: คุณแน่ใจหรือไม่ที่จะลบข้อมูลการเช็คชื่อย้อนหลังเกิน 6 เดือน?")) {
@@ -1223,6 +1284,10 @@
 
       google.script.run.withSuccessHandler(function(res) {
         alert(res.msg);
+        if (res.success) {
+          isAdminLoggedIn = true;
+          currentAdminPassword = pwd;
+        }
       }).deleteAttendanceOlderThanSixMonths(pwd);
     }
   </script>

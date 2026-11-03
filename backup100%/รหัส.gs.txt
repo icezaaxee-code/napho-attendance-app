@@ -1,0 +1,558 @@
+// ==========================================
+// 📌 CONFIGURATIONS (ตั้งค่า Chat ID 2 กลุ่ม)
+// ==========================================
+const SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1Bu-1gEpOEsBMd27UCi8ZPfYkLEfRzvriMSdeVtfXXgc/edit';
+const TELEGRAM_TOKEN = '8936671004:AAFcDED3db5kMQSs9uAt_opzQyES-fqIse4'; 
+const TELEGRAM_CHAT_ID = '-4437583942';    // 📌 กลุ่มที่ 1
+const TELEGRAM_CHAT_ID_2 = '-4331584274';             // 🔑 ใส่ Chat ID ของกลุ่มที่ 2 ตรงนี้ (ถ้ามี)
+const ADMIN_PASSWORD = "adminaki";
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('ระบบเช็คชื่อนักเรียน โรงเรียนบ้านนาโพธิ์')
+    .setFaviconUrl('https://i.postimg.cc/RFyY06vm/Generated-Image-y-Us-Ne-GEJc-MD2CGV7.png')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// ==========================================
+// 👥 1. ดึงรายชื่อนักเรียน (จากชีต Students)
+// ==========================================
+function getStudentListAll(className) {
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    const sheet = ss.getSheetByName('Students');
+    if (!sheet) return [];
+    const data = sheet.getDataRange().getDisplayValues();
+    const students = [];
+    for (let i = 1; i < data.length; i++) {
+      var rowClass = data[i][0].toString().trim();
+      if (!className || className === 'all' || rowClass === className.toString().trim()) {
+        students.push({ room: rowClass, id: data[i][1].toString().trim(), name: data[i][2].toString().trim() });
+      }
+    }
+    return students;
+  } catch (error) { return []; }
+}
+
+// ==========================================
+// 🔍 2. ดึงสถานะการเช็คชื่อเดิมตามวันที่/คาบ/ชั้นเรียน
+// ==========================================
+function getExistingAttendance(targetDateStr, session, className) {
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    const sheet = ss.getSheetByName('Attendance');
+    if (!sheet) return {};
+    
+    const data = sheet.getDataRange().getDisplayValues();
+    const result = {}; 
+    
+    const targetParts = targetDateStr.split('-');
+    const formattedTarget = `${targetParts[0]}/${targetParts[1].padStart(2, '0')}/${targetParts[2].padStart(2, '0')}`;
+    
+    for (let i = 1; i < data.length; i++) {
+      let rowDate = data[i][0].toString().trim().split(' ')[0];
+      let rowSession = data[i][2].toString().trim();
+      let rowClass = data[i][3].toString().trim();
+      
+      if (rowDate === formattedTarget && rowSession === session.trim() && rowClass === className.trim()) {
+        let stuName = data[i][6].toString().trim();
+        let status = data[i][7].toString().trim();
+        result[stuName] = status;
+      }
+    }
+    return result;
+  } catch (e) { return {}; }
+}
+
+// ==========================================
+// 📝 3. บันทึกการเช็คชื่อรวม (สลับสีหัวข้อ Telegram + แจ้งเตือน 2 กลุ่ม)
+// ==========================================
+function saveUnifiedAttendance(data) {
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    let sheet = ss.getSheetByName('Attendance');
+    if (!sheet) {
+      sheet = ss.insertSheet('Attendance');
+      sheet.appendRow(['วัน/เวลา', 'วันในสัปดาห์', 'ช่วงเวลา/คาบ', 'ชั้นเรียน', 'วิชา/กิจกรรม', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'สถานะ']);
+    }
+
+    // ⛔ ป้องกันการบันทึกวันที่ในอนาคตจากฝั่ง Backend
+    let inputDateObj = new Date(data.customDate);
+    let todayObj = new Date();
+    todayObj.setHours(23, 59, 59, 999);
+    if (inputDateObj > todayObj) {
+      return '❌ ไม่สามารถบันทึกข้อมูลการเช็คชื่อของวันที่ในอนาคตได้!';
+    }
+    
+    // 📌 สร้าง Timestamp: วันที่เลือก + เวลาจริง ณ ขณะกดบันทึก (HH:mm:ss)
+    let saveTime = new Date();
+    let timeOnlyStr = Utilities.formatDate(saveTime, "Asia/Bangkok", "HH:mm:ss");
+    
+    let parts = data.customDate.split('-');
+    let targetDateStr = `${parts[0]}/${parts[1].padStart(2, '0')}/${parts[2].padStart(2, '0')}`;
+    
+    const timestamp = `${targetDateStr} ${timeOnlyStr}`;
+    const todayDateOnly = targetDateStr;
+    
+    // 🧹 ล้างอักขระพิเศษ/อีโมจิเพื่อเปรียบเทียบข้อความได้แม่นยำ
+    const cleanSession = data.session.replace(/[^\u0E00-\u0E7Fa-zA-Z0-9\s]/g, '').trim();
+
+    const autoFillClasses = ['อ.2', 'อ.3', 'ป.1', 'ป.2', 'ป.3', 'ป.4'];
+    const isAutoFillClass = autoFillClasses.includes(data.className.trim());
+    const isMorningSession = (cleanSession === 'เข้าแถวเช้า');
+
+    let sessionsToSave = [cleanSession];
+    if (isAutoFillClass && isMorningSession) {
+      sessionsToSave = [
+        'เข้าแถวเช้า', 
+        'คาบ 1', 'คาบ 2', 'คาบ 3', 'คาบ 4', 
+        'เข้าแถวเที่ยง', 
+        'คาบ 5', 'คาบ 6', 'คาบ 7', 
+        'เข้าแถวเย็น'
+      ];
+    }
+
+    // 📌 ลบข้อมูลเดิมของ คาบ/วัน/ชั้นเรียน นั้นออกก่อนเพื่อ Overwrite แถวเดิม
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const existingData = sheet.getRange(2, 1, lastRow - 1, 4).getDisplayValues();
+      for (let i = existingData.length - 1; i >= 0; i--) {
+        const rowDateStr = existingData[i][0].toString().trim().split(' ')[0];
+        const rowSession = existingData[i][2].toString().trim();
+        const rowClass = existingData[i][3].toString().trim();
+        
+        if (rowDateStr === todayDateOnly && rowClass === data.className.toString().trim() && sessionsToSave.includes(rowSession)) {
+          sheet.deleteRow(i + 2);
+        }
+      }
+    }
+    
+    let scheduleData = getScheduleData();
+    let present = 0, absent = 0, leave = 0, skip = 0, late = 0;
+    let absentNames = [], leaveNames = [], skipNames = [], lateNames = [];
+    const rowsToAdd = [];
+
+    sessionsToSave.forEach(sessionName => {
+      let currentSubject = data.subject;
+      if (sessionName.startsWith("คาบ ")) {
+        let hourNum = sessionName.replace("คาบ ", "");
+        if (scheduleData[data.day] && scheduleData[data.day][data.className] && scheduleData[data.day][data.className][hourNum]) {
+          currentSubject = scheduleData[data.day][data.className][hourNum];
+        } else {
+          currentSubject = "กิจกรรม/รายวิชาเรียน";
+        }
+      } else if (sessionName !== 'เข้าแถวเช้า') {
+        currentSubject = "กิจกรรมเข้าแถว/อบรมระเบียบวินัย";
+      }
+
+      data.students.forEach(student => {
+        rowsToAdd.push([timestamp, data.day, sessionName, data.className, currentSubject, student.id, student.name, student.status]);
+        
+        if (sessionName === cleanSession) {
+          if (student.status === 'มา' || student.status === 'มาเรียน') present++;
+          else if (student.status === 'สาย') { late++; lateNames.push(student.name); }
+          else if (student.status === 'ขาด' || student.status === 'ขาดเรียน') { absent++; absentNames.push(student.name); }
+          else if (student.status === 'ลา') { leave++; leaveNames.push(student.name); }
+          else if (student.status === 'หนีเรียน') { skip++; skipNames.push(student.name); }
+        }
+      });
+    });
+
+    if (rowsToAdd.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, rowsToAdd[0].length).setValues(rowsToAdd);
+    }
+
+    // 🎨 📌 สลับสีหัวข้อตามช่วงเวลา (เช้า = 🟦 ฟ้า | เที่ยง = 🟨 เหลือง | เย็น = 🟧 ส้ม | คาบเรียน = 🟩 เขียว)
+    let headerIcon = '🟦'; // Default เช้า = สีฟ้า
+    if (cleanSession === 'เข้าแถวเที่ยง') {
+      headerIcon = '🟨'; // เที่ยง = สีเหลือง
+    } else if (cleanSession === 'เข้าแถวเย็น') {
+      headerIcon = '🟧'; // เย็น = สีส้ม
+    } else if (cleanSession.startsWith("คาบ ")) {
+      headerIcon = '🟩'; // คาบเรียน = สีเขียว
+    }
+
+    // 📲 📌 สร้างข้อความแจ้งเตือน Telegram
+    let message = `${headerIcon} *แจ้งเตือนเช็คชื่อ ${data.className}* (วันที่ ${todayDateOnly})\n📅 วัน${data.day} [${cleanSession}]\n📌 วิชา/กิจกรรม: ${data.subject}\n--------------------\n`;
+    if (isAutoFillClass && isMorningSession) {
+      message += `⚡ *ระบบลงเวลาอัตโนมัติครบทุกคาบ (เข้าแถวเช้า-เย็น)*\n--------------------\n`;
+    }
+    message += `✔️ มา: ${present} คน | ⚠️ สาย: ${late} คน\n✖️ ขาด: ${absent} คน | 📝 ลา: ${leave} คน | 🏃 หนี: ${skip} คน\n`;
+    
+    if (lateNames.length > 0) message += `\n⚠️ *สาย:*\n- ${lateNames.join('\n- ')}\n`;
+    if (absentNames.length > 0) message += `\n✖️ *ขาด:*\n- ${absentNames.join('\n- ')}\n`;
+    if (leaveNames.length > 0) message += `\n📝 *ลา:*\n- ${leaveNames.join('\n- ')}\n`;
+    if (skipNames.length > 0) message += `\n🏃 *หนีเรียน:*\n- ${skipNames.join('\n- ')}`;
+
+    sendToTelegramBySession(cleanSession, message);
+    
+    let returnMsg = 'อัปเดตบันทึกการเช็คชื่อวันที่ ' + todayDateOnly + ' [' + cleanSession + '] เรียบร้อยแล้ว!';
+    if (isAutoFillClass && isMorningSession) {
+      returnMsg += ' (ปรับปรุงครอบคลุมทุกคาบเรียนประจำวันให้อัตโนมัติ)';
+    }
+    return returnMsg;
+  } catch (error) { return 'เกิดข้อผิดพลาด: ' + error.toString(); }
+}
+
+// ==========================================
+// 📲 ฟังก์ชันแยกส่ง Telegram 2 กลุ่ม (กลุ่ม 1 = เข้าแถว | กลุ่ม 2 = คาบ 1-7)
+// ==========================================
+function sendToTelegramBySession(cleanSession, message) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+  const lineSessions = ['เข้าแถวเช้า', 'เข้าแถวเที่ยง', 'เข้าแถวเย็น'];
+  let targetChatIds = [];
+
+  if (lineSessions.includes(cleanSession)) {
+    // 📌 เข้าแถวเช้า/เที่ยง/เย็น -> ส่งเข้ากลุ่มที่ 1
+    if (TELEGRAM_CHAT_ID) targetChatIds.push({ id: TELEGRAM_CHAT_ID, name: 'กลุ่มที่ 1 (เข้าแถว)' });
+  } else if (cleanSession.startsWith("คาบ ")) {
+    // 📌 คาบ 1 ถึง คาบ 7 -> ส่งเข้ากลุ่มที่ 2 ทุกคาบ
+    if (TELEGRAM_CHAT_ID_2) targetChatIds.push({ id: TELEGRAM_CHAT_ID_2, name: 'กลุ่มที่ 2 (คาบเรียน 1-7)' });
+  }
+
+  targetChatIds.forEach(target => {
+    let targetId = target.id.trim();
+
+    if (targetId.startsWith('-') && !targetId.startsWith('-100')) {
+      targetId = '-100' + targetId.substring(1);
+    }
+
+    let payload = { text: message, parse_mode: 'Markdown' };
+
+    if (targetId.includes('_')) {
+      let parts = targetId.split('_');
+      payload.chat_id = parts[0];
+      payload.message_thread_id = parts[1];
+    } else {
+      payload.chat_id = targetId;
+    }
+
+    const options = { 
+      method: 'post', 
+      contentType: 'application/json', 
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+
+    try { 
+      let response = UrlFetchApp.fetch(url, options);
+      let resJson = JSON.parse(response.getContentText());
+      if (!resJson.ok) {
+        Logger.log(`❌ ส่ง Telegram ${target.name} (${targetId}) ล้มเหลว: ` + resJson.description);
+      } else {
+        Logger.log(`✅ ส่ง Telegram ${target.name} (${targetId}) สำเร็จ`);
+      }
+    } catch (e) {
+      Logger.log(`❌ เกิดข้อผิดพลาดใน ${target.name}: ` + e.toString());
+    }
+  });
+}
+// ==========================================
+// 📊 4. ศูนย์วิเคราะห์และสถิติข้อมูล
+// ==========================================
+function getAnalyticsRawData(className, timeFilter) {
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    const sheet = ss.getSheetByName('Attendance');
+    if (!sheet) return [];
+    
+    const data = sheet.getDataRange().getDisplayValues();
+    let records = [];
+    const today = new Date();
+    
+    for (let i = 1; i < data.length; i++) {
+      let rowClass = data[i][3].toString().trim();
+      let rawDateStr = data[i][0];
+      
+      let isValidClass = (!className || className === 'all' || rowClass === className.toString().trim());
+      let isValidTime = checkTimeFilter(rawDateStr, timeFilter, today);
+      
+      if (isValidClass && isValidTime) {
+        records.push({
+          date: data[i][0], 
+          day: data[i][1], 
+          session: data[i][2], 
+          className: rowClass,
+          subject: data[i][4], 
+          stuId: data[i][5], 
+          stuName: data[i][6], 
+          status: data[i][7]
+        });
+      }
+    }
+    return records;
+  } catch (error) { return []; }
+}
+
+function checkTimeFilter(rawDateStr, timeFilter, today) {
+  if (!timeFilter || timeFilter === 'all') return true;
+  if (!rawDateStr) return false;
+  
+  let parts = rawDateStr.split(' ')[0].split(/[-/]/);
+  let rowDate;
+  if (parts.length === 3) {
+    if (parts[0].length === 4) rowDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    else rowDate = new Date(parts[2] > 2500 ? parts[2] - 543 : parts[2], parts[1] - 1, parts[0]);
+  } else return true;
+
+  if (timeFilter === 'today') {
+    return rowDate.toDateString() === today.toDateString();
+  } else if (timeFilter === 'this_week') {
+    let lastWeek = new Date(); lastWeek.setDate(today.getDate() - 7);
+    return rowDate >= lastWeek && rowDate <= today;
+  } else if (timeFilter === 'last_30') {
+    let lastMonth = new Date(); lastMonth.setDate(today.getDate() - 30);
+    return rowDate >= lastMonth && rowDate <= today;
+  } else {
+    return (rowDate.getMonth() + 1) === parseInt(timeFilter);
+  }
+}
+
+// ==========================================
+// 🔑 5. ADMIN MANAGEMENT & BACKUP / RESTORE / DELETE
+// ==========================================
+function getScheduleData() {
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    var sheet = ss.getSheetByName('ตารางเรียน');
+    if (!sheet) {
+      sheet = ss.insertSheet('ตารางเรียน');
+      sheet.appendRow(['วัน', 'ระดับชั้น', 'คาบ', 'วิชา']);
+      seedDefaultSchedules(sheet);
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      seedDefaultSchedules(sheet);
+      data = sheet.getDataRange().getValues();
+    }
+
+    var schedule = {};
+    for (var i = 1; i < data.length; i++) {
+      var day = data[i][0].toString().trim();
+      var cls = data[i][1].toString().trim();
+      var hour = data[i][2].toString().trim();
+      var subj = data[i][3].toString().trim();
+      
+      if (!schedule[day]) schedule[day] = {};
+      if (!schedule[day][cls]) schedule[day][cls] = {};
+      schedule[day][cls][hour] = subj;
+    }
+    return schedule;
+  } catch (e) { return {}; }
+}
+
+function seedDefaultSchedules(sheet) {
+  const defaults = [
+    // ป.5
+    ['จันทร์', 'ป.5', '1', 'ภาษาไทย'], ['จันทร์', 'ป.5', '2', 'คณิตศาสตร์'], ['จันทร์', 'ป.5', '3', 'วิทยาการคำนวณ'], ['จันทร์', 'ป.5', '4', 'ภาษาอังกฤษพื้นฐาน'], ['จันทร์', 'ป.5', '5', 'สังคมศึกษา'], ['จันทร์', 'ป.5', '6', 'แนะแนว'], ['จันทร์', 'ป.5', '7', 'เศรษฐกิจพอเพียง'],
+    ['อังคาร', 'ป.5', '1', 'คณิตศาสตร์'], ['อังคาร', 'ป.5', '2', 'ทัศนศิลป์'], ['อังคาร', 'ป.5', '3', 'ภาษาไทย'], ['อังคาร', 'ป.5', '4', 'สุขศึกษาและพลศึกษา'], ['อังคาร', 'ป.5', '5', 'อังกฤษเสริม'], ['อังคาร', 'ป.5', '6', 'ชุมนุม'], ['อังคาร', 'ป.5', '7', 'ชุมนุม'],
+    ['พุธ', 'ป.5', '1', 'ภาษาไทย'], ['พุธ', 'ป.5', '2', 'การงานอาชีพ'], ['พุธ', 'ป.5', '3', 'คณิตศาสตร์'], ['พุธ', 'ป.5', '4', 'สุขศึกษาและพลศึกษา'], ['พุธ', 'ป.5', '5', 'รักการอ่าน'], ['พุธ', 'ป.5', '6', 'จิตอาสา'], ['พุธ', 'ป.5', '7', 'ลูกเสือ'],
+    ['พฤหัสบดี', 'ป.5', '1', 'ภาษาไทย'], ['พฤหัสบดี', 'ป.5', '2', 'คณิตศาสตร์'], ['พฤหัสบดี', 'ป.5', '3', 'วิทยาศาสตร์'], ['พฤหัสบดี', 'ป.5', '4', 'อังกฤษเสริม'], ['พฤหัสบดี', 'ป.5', '5', 'สังคมศึกษา'], ['พฤหัสบดี', 'ป.5', '6', 'บำเพ็ญประโยชน์'], ['พฤหัสบดี', 'ป.5', '7', 'เศรษฐกิจพอเพียง'],
+    ['ศุกร์', 'ป.5', '1', 'ภาษาอังกฤษพื้นฐาน'], ['ศุกร์', 'ป.5', '2', 'ดนตรี-นาฏศิลป์'], ['ศุกร์', 'ป.5', '3', 'ประวัติศาสตร์'], ['ศุกร์', 'ป.5', '4', 'วิทยาศาสตร์'], ['ศุกร์', 'ป.5', '5', 'ซ่อมเสริม O-NET'], ['ศุกร์', 'ป.5', '6', 'เศรษฐกิจพอเพียง'], ['ศุกร์', 'ป.5', '7', 'จริยธรรม'],
+
+    // ป.6
+    ['จันทร์', 'ป.6', '1', 'วิทยาศาสตร์'], ['จันทร์', 'ป.6', '2', 'วิทยาการคำนวณ'], ['จันทร์', 'ป.6', '3', 'สุขศึกษาและพลศึกษา'], ['จันทร์', 'ป.6', '4', 'ภาษาไทย'], ['จันทร์', 'ป.6', '5', 'ภาษาอังกฤษพื้นฐาน'], ['จันทร์', 'ป.6', '6', 'แนะแนว'], ['จันทร์', 'ป.6', '7', 'เศรษฐกิจพอเพียง'],
+    ['อังคาร', 'ป.6', '1', 'ภาษาอังกฤษพื้นฐาน'], ['อังคาร', 'ป.6', '2', 'คณิตศาสตร์'], ['อังคาร', 'ป.6', '3', 'ภาษาไทย'], ['อังคาร', 'ป.6', '4', 'ประวัติศาสตร์'], ['อังคาร', 'ป.6', '5', 'ซ่อมเสริม O-NET'], ['อังคาร', 'ป.6', '6', 'ชุมนุม'], ['อังคาร', 'ป.6', '7', 'ชุมนุม'],
+    ['พุธ', 'ป.6', '1', 'คณิตศาสตร์'], ['พุธ', 'ป.6', '2', 'ภาษาไทย'], ['พุธ', 'ป.6', '3', 'ทัศนศิลป์'], ['พุธ', 'ป.6', '4', 'การงานอาชีพ'], ['พุธ', 'ป.6', '5', 'รักการอ่าน'], ['พุธ', 'ป.6', '6', 'จิตอาสา'], ['พุธ', 'ป.6', '7', 'ลูกเสือ'],
+    ['พฤหัสบดี', 'ป.6', '1', 'คณิตศาสตร์'], ['พฤหัสบดี', 'ป.6', '2', 'สังคมศึกษา'], ['พฤหัสบดี', 'ป.6', '3', 'ภาษาไทย'], ['พฤหัสบดี', 'ป.6', '4', 'สุขศึกษาและพลศึกษา'], ['พฤหัสบดี', 'ป.6', '5', 'อังกฤษเสริม'], ['พฤหัสบดี', 'ป.6', '6', 'บำเพ็ญประโยชน์'], ['พฤหัสบดี', 'ป.6', '7', 'เศรษฐกิจพอเพียง'],
+    ['ศุกร์', 'ป.6', '1', 'คณิตศาสตร์'], ['ศุกร์', 'ป.6', '2', 'วิทยาศาสตร์'], ['ศุกร์', 'ป.6', '3', 'ดนตรี-นาฏศิลป์'], ['ศุกร์', 'ป.6', '4', 'อังกฤษเสริม'], ['ศุกร์', 'ป.6', '5', 'สังคมศึกษา'], ['ศุกร์', 'ป.6', '6', 'เศรษฐกิจพอเพียง'], ['ศุกร์', 'ป.6', '7', 'จริยธรรม'],
+
+    // ม.1
+    ['จันทร์', 'ม.1', '1', 'วิทยาการคำนวณ'], ['จันทร์', 'ม.1', '2', 'คณิตศาสตร์'], ['จันทร์', 'ม.1', '3', 'ภาษาไทย'], ['จันทร์', 'ม.1', '4', 'ภาษาอังกฤษพื้นฐาน'], ['จันทร์', 'ม.1', '5', 'สังคมศึกษา'], ['จันทร์', 'ม.1', '6', 'ดนตรี-นาฏศิลป์'], ['จันทร์', 'ม.1', '7', 'แนะแนว'],
+    ['อังคาร', 'ม.1', '1', 'ทักษะฟัง-พูดภาษาอังกฤษ'], ['อังคาร', 'ม.1', '2', 'ทักษะภาษาเพื่อการสื่อสาร'], ['อังคาร', 'ม.1', '3', 'คณิตศาสตร์'], ['อังคาร', 'ม.1', '4', 'วิทยาศาสตร์'], ['อังคาร', 'ม.1', '5', 'การงานอาชีพ'], ['อังคาร', 'ม.1', '6', 'ชุมนุม'], ['อังคาร', 'ม.1', '7', 'ชุมนุม'],
+    ['พุธ', 'ม.1', '1', 'วิทยาศาสตร์'], ['พุธ', 'ม.1', '2', 'ภาษาอังกฤษพื้นฐาน'], ['พุธ', 'ม.1', '3', 'ภาษาไทย'], ['พุธ', 'ม.1', '4', 'สังคมศึกษา'], ['พุธ', 'ม.1', '5', 'ประวัติศาสตร์'], ['พุธ', 'ม.1', '6', 'จิตอาสา'], ['พุธ', 'ม.1', '7', 'ลูกเสือ'],
+    ['พฤหัสบดี', 'ม.1', '1', 'คอมพิวเตอร์'], ['พฤหัสบดี', 'ม.1', '2', 'คณิตศาสตร์'], ['พฤหัสบดี', 'ม.1', '3', 'พลศึกษา'], ['พฤหัสบดี', 'ม.1', '4', 'ทักษะฟัง-พูดภาษาอังกฤษ'], ['พฤหัสบดี', 'ม.1', '5', 'ทัศนศิลป์'], ['พฤหัสบดี', 'ม.1', '6', 'สังคมศึกษา'], ['พฤหัสบดี', 'ม.1', '7', 'เศรษฐกิจพอเพียง1'],
+    ['ศุกร์', 'ม.1', '1', 'คอมพิวเตอร์'], ['ศุกร์', 'ม.1', '2', 'ภาษาไทย'], ['ศุกร์', 'ม.1', '3', 'วิทยาศาสตร์'], ['ศุกร์', 'ม.1', '4', 'ภาษาอังกฤษพื้นฐาน'], ['ศุกร์', 'ม.1', '5', 'สุขศึกษา'], ['ศุกร์', 'ม.1', '6', 'เศรษฐกิจพอเพียง2'], ['ศุกร์', 'ม.1', '7', 'จริยธรรม'],
+
+    // ม.2
+    ['จันทร์', 'ม.2', '1', 'ภาษาอังกฤษพื้นฐาน'], ['จันทร์', 'ม.2', '2', 'ภาษาไทย'], ['จันทร์', 'ม.2', '3', 'คณิตศาสตร์'], ['จันทร์', 'ม.2', '4', 'วิทยาศาสตร์'], ['จันทร์', 'ม.2', '5', 'ประวัติศาสตร์'], ['จันทร์', 'ม.2', '6', 'สังคมศึกษา'], ['จันทร์', 'ม.2', '7', 'แนะแนว'],
+    ['อังคาร', 'ม.2', '1', 'วิทยาศาสตร์'], ['อังคาร', 'ม.2', '2', 'ทักษะการอ่าน-เขียนภาษาอังกฤษ'], ['อังคาร', 'ม.2', '3', 'การงานอาชีพ'], ['อังคาร', 'ม.2', '4', 'คณิตศาสตร์'], ['อังคาร', 'ม.2', '5', 'สุขศึกษา'], ['อังคาร', 'ม.2', '6', 'ชุมนุม'], ['อังคาร', 'ม.2', '7', 'ชุมนุม'],
+    ['พุธ', 'ม.2', '1', 'ภาษาอังกฤษพื้นฐาน'], ['พุธ', 'ม.2', '2', 'ดนตรี-นาฏศิลป์'], ['พุธ', 'ม.2', '3', 'วิทยาศาสตร์'], ['พุธ', 'ม.2', '4', 'ภาษาไทย'], ['พุธ', 'ม.2', '5', 'ทัศนศิลป์'], ['พุธ', 'ม.2', '6', 'จิตอาสา'], ['พุธ', 'ม.2', '7', 'ลูกเสือ'],
+    ['พฤหัสบดี', 'ม.2', '1', 'ทักษะการอ่าน-เขียนภาษาอังกฤษ'], ['พฤหัสบดี', 'ม.2', '2', 'ภาษาไทย'], ['พฤหัสบดี', 'ม.2', '3', 'คณิตศาสตร์'], ['พฤหัสบดี', 'ม.2', '4', 'สังคมศึกษา'], ['พฤหัสบดี', 'ม.2', '5', 'พลศึกษา'], ['พฤหัสบดี', 'ม.2', '6', 'คอมพิวเตอร์'], ['พฤหัสบดี', 'ม.2', '7', 'เศรษฐกิจพอเพียง1'],
+    ['ศุกร์', 'ม.2', '1', 'ภาษาอังกฤษพื้นฐาน'], ['ศุกร์', 'ม.2', '2', 'วิทยาการคำนวณ'], ['ศุกร์', 'ม.2', '3', 'เสริมทักษะการเขียน'], ['ศุกร์', 'ม.2', '4', 'สังคมศึกษา'], ['ศุกร์', 'ม.2', '5', 'คอมพิวเตอร์'], ['ศุกร์', 'ม.2', '6', 'เศรษฐกิจพอเพียง2'], ['ศุกร์', 'ม.2', '7', 'จริยธรรม'],
+
+    // ม.3
+    ['จันทร์', 'ม.3', '1', 'ภาษาไทย'], ['จันทร์', 'ม.3', '2', 'ภาษาอังกฤษพื้นฐาน'], ['จันทร์', 'ม.3', '3', 'วิทยาศาสตร์'], ['จันทร์', 'ม.3', '4', 'คณิตศาสตร์'], ['จันทร์', 'ม.3', '5', 'ดนตรี-นาฏศิลป์'], ['จันทร์', 'ม.3', '6', 'ประวัติศาสตร์'], ['จันทร์', 'ม.3', '7', 'แนะแนว'],
+    ['อังคาร', 'ม.3', '1', 'เสริมทักษะการอ่าน'], ['อังคาร', 'ม.3', '2', 'วิทยาศาสตร์'], ['อังคาร', 'ม.3', '3', 'อังกฤษเพื่อการคิดวิเคราะห์'], ['อังคาร', 'ม.3', '4', 'การงานอาชีพ'], ['อังคาร', 'ม.3', '5', 'คอมพิวเตอร์'], ['อังคาร', 'ม.3', '6', 'ชุมนุม'], ['อังคาร', 'ม.3', '7', 'ชุมนุม'],
+    ['พุธ', 'ม.3', '1', 'วิทยาการคำนวณ'], ['พุธ', 'ม.3', '2', 'คณิตศาสตร์'], ['พุธ', 'ม.3', '3', 'ภาษาอังกฤษพื้นฐาน'], ['พุธ', 'ม.3', '4', 'ทัศนศิลป์'], ['พุธ', 'ม.3', '5', 'สังคมศึกษา'], ['พุธ', 'ม.3', '6', 'จิตอาสา'], ['พุธ', 'ม.3', '7', 'ลูกเสือ'],
+    ['พฤหัสบดี', 'ม.3', '1', 'ภาษาไทย'], ['พฤหัสบดี', 'ม.3', '2', 'คอมพิวเตอร์'], ['พฤหัสบดี', 'ม.3', '3', 'อังกฤษเพื่อการคิดวิเคราะห์'], ['พฤหัสบดี', 'ม.3', '4', 'วิทยาศาสตร์'], ['พฤหัสบดี', 'ม.3', '5', 'สังคมศึกษา'], ['พฤหัสบดี', 'ม.3', '6', 'พลศึกษา'], ['พฤหัสบดี', 'ม.3', '7', 'เศรษฐกิจพอเพียง'],
+    ['ศุกร์', 'ม.3', '1', 'ภาษาไทย'], ['ศุกร์', 'ม.3', '2', 'คณิตศาสตร์'], ['ศุกร์', 'ม.3', '3', 'ภาษาอังกฤษพื้นฐาน'], ['ศุกร์', 'ม.3', '4', 'สุขศึกษา'], ['ศุกร์', 'ม.3', '5', 'สังคมศึกษา'], ['ศุกร์', 'ม.3', '6', 'เศรษฐกิจพอเพียง'], ['ศุกร์', 'ม.3', '7', 'จริยธรรม']
+  ];
+
+  defaults.forEach(r => sheet.appendRow(r));
+}
+
+function saveScheduleData(password, day, cls, hour, subject) {
+  if (password !== ADMIN_PASSWORD) return { success: false, msg: "รหัสผ่าน Admin ไม่ถูกต้อง!" };
+  
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    var sheet = ss.getSheetByName('ตารางเรียน');
+    if (!sheet) {
+      sheet = ss.insertSheet('ตารางเรียน');
+      sheet.appendRow(['วัน', 'ระดับชั้น', 'คาบ', 'วิชา']);
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    var foundIndex = -1;
+    
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0].toString().trim() === day && data[i][1].toString().trim() === cls && data[i][2].toString().trim() === hour.toString()) {
+        foundIndex = i + 1;
+        break;
+      }
+    }
+    
+    if (subject === "") {
+      if (foundIndex !== -1) sheet.deleteRow(foundIndex);
+    } else {
+      if (foundIndex !== -1) {
+        sheet.getRange(foundIndex, 4).setValue(subject);
+      } else {
+        sheet.appendRow([day, cls, hour, subject]);
+      }
+    }
+    return { success: true, msg: "อัปเดตตารางเรียนสำเร็จ!" };
+  } catch (e) { return { success: false, msg: "เกิดข้อผิดพลาด: " + e.toString() }; }
+}
+
+function getAllSheetsBackupData(password) {
+  if (password !== ADMIN_PASSWORD) return { success: false, msg: "รหัสผ่าน Admin ไม่ถูกต้อง!" };
+  
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    const sheets = ss.getSheets();
+    const backupAllData = {};
+
+    sheets.forEach(sheet => {
+      const sheetName = sheet.getName();
+      const data = sheet.getDataRange().getDisplayValues();
+      backupAllData[sheetName] = data;
+    });
+
+    return { success: true, data: backupAllData };
+  } catch (e) {
+    return { success: false, msg: "เกิดข้อผิดพลาดในการดึงข้อมูลสำรอง: " + e.toString() };
+  }
+}
+
+function restoreAttendanceData(password, rowsToAdd) {
+  if (password !== ADMIN_PASSWORD) return { success: false, msg: "รหัสผ่าน Admin ไม่ถูกต้อง!" };
+  
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    let sheet = ss.getSheetByName('Attendance');
+    if (!sheet) {
+      sheet = ss.insertSheet('Attendance');
+      sheet.appendRow(['วัน/เวลา', 'วันในสัปดาห์', 'ช่วงเวลา/คาบ', 'ชั้นเรียน', 'วิชา/กิจกรรม', 'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'สถานะ']);
+    }
+
+    if (!rowsToAdd || rowsToAdd.length === 0) {
+      return { success: false, msg: "ไม่พบข้อมูลที่ถูกต้องในไฟล์ที่อัปโหลด" };
+    }
+
+    let cleanRows = rowsToAdd.filter(row => {
+      if (!row || row.length < 8) return false;
+      let firstCell = row[0] ? row[0].toString().trim() : "";
+      return firstCell !== 'วัน/เวลา' && !firstCell.includes('===') && !firstCell.includes('[');
+    });
+
+    if (cleanRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, cleanRows.length, cleanRows[0].length).setValues(cleanRows);
+      return { success: true, msg: `📥 นำเข้าข้อมูลสำเร็จเรียบร้อยแล้ว (เพิ่มข้อมูลทั้งหมด ${cleanRows.length} รายการ)` };
+    } else {
+      return { success: false, msg: "ไม่พบข้อมูลสถิติที่ตรงตามรูปแบบระบบในไฟล์นี้" };
+    }
+  } catch (e) {
+    return { success: false, msg: "เกิดข้อผิดพลาดในการนำเข้าข้อมูล: " + e.toString() };
+  }
+}
+
+function deleteAttendanceOlderThanSixMonths(password) {
+  if (password !== ADMIN_PASSWORD) return { success: false, msg: "รหัสผ่าน Admin ไม่ถูกต้อง!" };
+  try {
+    const ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+    const sheet = ss.getSheetByName('Attendance');
+    if (!sheet) return { success: false, msg: "ไม่พบชีต Attendance ในระบบ" };
+
+    const data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) return { success: false, msg: "ไม่มีข้อมูลการเช็คชื่อในระบบ" };
+
+    const today = new Date();
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setDate(today.getDate() - 180);
+
+    let deletedCount = 0;
+    for (let i = data.length - 1; i >= 1; i--) {
+      let rawDateStr = data[i][0].toString().trim().split(' ')[0]; 
+      let parts = rawDateStr.split(/[-/]/);
+      let rowDate;
+
+      if (parts.length === 3) {
+        if (parts[0].length === 4) rowDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        else rowDate = new Date(parts[2] > 2500 ? parts[2] - 543 : parts[2], parts[1] - 1, parts[0]);
+      }
+
+      if (rowDate && rowDate < sixMonthsAgo) {
+        sheet.deleteRow(i + 1);
+        deletedCount++;
+      }
+    }
+
+    if (deletedCount > 0) {
+      return { success: true, msg: `🗑️ ลบข้อมูลย้อนหลังเกิน 6 เดือน เรียบร้อย (รวม ${deletedCount} รายการ)` };
+    } else {
+      return { success: true, msg: "ℹ️ ไม่พบข้อมูลการเช็คชื่อที่เก่าเกิน 6 เดือน" };
+    }
+  } catch (e) { return { success: false, msg: "เกิดข้อผิดพลาด: " + e.toString() }; }
+}
+// ==========================================
+// 🌐 REST API Gateway สำหรับเชื่อมต่อกับ Vercel (รองรับ CORS 100%)
+// ==========================================
+function doPost(e) {
+  try {
+    const contents = JSON.parse(e.postData.contents);
+    const action = contents.action;
+    const data = contents.data;
+    let result = null;
+
+    switch (action) {
+      case 'getStudentListAll':
+        result = getStudentListAll(data.className);
+        break;
+      case 'getScheduleData':
+        result = getScheduleData();
+        break;
+      case 'getExistingAttendance':
+        result = getExistingAttendance(data.targetDateStr, data.session, data.className);
+        break;
+      case 'saveUnifiedAttendance':
+        result = saveUnifiedAttendance(data);
+        break;
+      case 'getAnalyticsRawData':
+        result = getAnalyticsRawData(data.className, data.timeFilter);
+        break;
+      case 'saveScheduleData':
+        result = saveScheduleData(data.password, data.day, data.cls, data.hour, data.subject);
+        break;
+      case 'getAllSheetsBackupData':
+        result = getAllSheetsBackupData(data.password);
+        break;
+      case 'restoreAttendanceData':
+        result = restoreAttendanceData(data.password, data.rowsData);
+        break;
+      case 'deleteAttendanceOlderThanSixMonths':
+        result = deleteAttendanceOlderThanSixMonths(data.password);
+        break;
+      default:
+        result = { success: false, msg: 'Unknown action' };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, msg: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
