@@ -677,47 +677,78 @@
       else if (currentAnalyticsSubView === 'discipline') renderDisciplineRiskAnalytics(area);
     }
 
-    function renderRoomAnalytics(container) {
-      let total = rawAnalyticsRecords.length;
-      if (total === 0) { container.innerHTML = '<div class="loading">📄 ไม่พบข้อมูลการเช็คชื่อช่วงเวลานี้</div>'; return; }
+   function renderRoomAnalytics(container) {
+      let totalRecords = rawAnalyticsRecords.length;
+      if (totalRecords === 0) { container.innerHTML = '<div class="loading">📄 ไม่พบข้อมูลการเช็คชื่อช่วงเวลานี้</div>'; return; }
 
-      let present = 0, absent = 0, leave = 0, skip = 0, late = 0;
+      let presentStudents = new Set();
+      let absentStudents = new Set();
+      let leaveStudents = new Set();
+      let skipStudents = new Set();
       let problemLogs = [];
 
       rawAnalyticsRecords.forEach(r => {
         let st = r.status;
-        if (st === 'มา' || st === 'มาเรียน') present++;
-        else if (st === 'สาย') { late++; present++; }
-        else if (st === 'ขาด' || st === 'ขาดเรียน') { absent++; problemLogs.push(r); }
-        else if (st === 'ลา') leave++;
-        else if (st === 'หนีเรียน') { skip++; problemLogs.push(r); }
+        let stuKey = r.stuName || r.studentId || 'unknown';
+
+        if (st === 'มา' || st === 'มาเรียน') {
+          presentStudents.add(stuKey);
+        } else if (st === 'สาย') {
+          presentStudents.add(stuKey);
+        } else if (st === 'ขาด' || st === 'ขาดเรียน') {
+          absentStudents.add(stuKey);
+          problemLogs.push(r);
+        } else if (st === 'ลา') {
+          leaveStudents.add(stuKey);
+        } else if (st === 'หนีเรียน') {
+          skipStudents.add(stuKey);
+          problemLogs.push(r);
+        }
       });
 
-      let rate = ((present / total) * 100).toFixed(1);
+      let presentCountAll = 0;
+      rawAnalyticsRecords.forEach(r => {
+        if (['มา', 'มาเรียน', 'สาย'].includes(r.status)) presentCountAll++;
+      });
+      let rate = ((presentCountAll / totalRecords) * 100).toFixed(1);
 
       let html = `<div class="stat-box p-3 text-center mb-3">
                     <div class="small text-white fw-bold">อัตราการเข้าเรียนรวมของห้อง</div>
                     <div class="display-4 fw-bold text-info">${rate}%</div>
-                    <div class="small text-white fw-bold">คิดจากข้อมูลเช็คชื่อทั้งหมด ${total} รายการ</div>
+                    <div class="small text-white fw-bold">คิดจากข้อมูลเช็คชื่อทั้งหมด ${totalRecords} รายการ</div>
                   </div>`;
 
+      // 📌 ปรับสีตัวเลขให้ตรงกับหัวข้อสถานะ และคำว่า "คน" เป็นสีขาวเข้ม
       html += `<div class="row g-2 text-center mb-3">
-                <div class="col-6"><div class="stat-box p-2"><span class="text-success fw-bold">✓ มาเรียน</span><h4 class="mb-0 mt-1">${present}</h4></div></div>
-                <div class="col-6"><div class="stat-box p-2"><span class="text-danger fw-bold">✕ ขาดเรียน</span><h4 class="mb-0 mt-1">${absent}</h4></div></div>
-                <div class="col-6"><div class="stat-box p-2"><span class="text-info fw-bold">📄 ลา</span><h4 class="mb-0 mt-1">${leave}</h4></div></div>
-                <div class="col-6"><div class="stat-box p-2"><span class="text-warning fw-bold">⚠️ หนีเรียน</span><h4 class="mb-0 mt-1">${skip}</h4></div></div>
+                <div class="col-6"><div class="stat-box p-2"><span class="text-success fw-bold">✓ มาเรียน</span><h4 class="mb-0 mt-1 text-success fw-bold">${presentStudents.size} <span class="text-white" style="font-size: 0.85rem;">คน</span></h4></div></div>
+                <div class="col-6"><div class="stat-box p-2"><span class="text-danger fw-bold">✕ ขาดเรียน</span><h4 class="mb-0 mt-1 text-danger fw-bold">${absentStudents.size} <span class="text-white" style="font-size: 0.85rem;">คน</span></h4></div></div>
+                <div class="col-6"><div class="stat-box p-2"><span class="text-info fw-bold">📄 ลา</span><h4 class="mb-0 mt-1 text-info fw-bold">${leaveStudents.size} <span class="text-white" style="font-size: 0.85rem;">คน</span></h4></div></div>
+                <div class="col-6"><div class="stat-box p-2"><span class="text-warning fw-bold">⚠️ หนีเรียน</span><h4 class="mb-0 mt-1 text-warning fw-bold">${skipStudents.size} <span class="text-white" style="font-size: 0.85rem;">คน</span></h4></div></div>
               </div>`;
 
       html += `<h6 class="fw-bold mt-4 mb-2 text-info"><i class="bi bi-clock-history me-1"></i> ประวัติการ ขาด/หนี (ล่าสุดขึ้นก่อน)</h6>`;
       if (problemLogs.length === 0) {
         html += `<div class="p-3 text-center text-muted">🎉 ไม่มีประวัติการขาดหรือหนีเรียน</div>`;
       } else {
-        html += `<div class="table-wrapper"><table><thead><tr><th>วันที่/คาบ</th><th>ชื่อ-สกุล</th><th>สถานะ</th></tr></thead><tbody>`;
+        html += `<div class="table-wrapper"><table style="color: #ffffff;"><thead><tr><th>วันที่/คาบ</th><th>ชื่อ-สกุล</th><th>สถานะ</th></tr></thead><tbody>`;
         problemLogs.slice().reverse().slice(0, 50).forEach(l => {
           let stClass = (l.status === 'ขาด' || l.status === 'ขาดเรียน') ? 'status-absent-text' : 'status-skip-text';
+          
+          let sessionColor = '#94a3b8';
+          let sName = l.session ? l.session.trim() : '';
+          if (sName.includes('คาบ')) {
+            sessionColor = '#22c55e';
+          } else if (sName.includes('เที่ยง')) {
+            sessionColor = '#eab308';
+          } else if (sName.includes('เช้า')) {
+            sessionColor = '#38bdf8';
+          } else if (sName.includes('เย็น')) {
+            sessionColor = '#c084fc';
+          }
+
           html += `<tr>
-                    <td>${l.date}<br><small class="text-muted">${l.session}</small></td>
-                    <td><b>${l.stuName}</b><br><small class="text-muted">${l.subject}</small></td>
+                    <td style="color: #ffffff;">${l.date}<br><small style="color: ${sessionColor}; font-weight: bold;">${l.session}</small></td>
+                    <td style="color: #ffffff;"><b style="color: #ffffff;">${l.stuName}</b><br><small style="color: #94a3b8;">${l.subject}</small></td>
                     <td class="${stClass}">${l.status}</td>
                   </tr>`;
         });
@@ -1080,15 +1111,34 @@
       detailModal.show();
     }
 
-    // 📌 1. ดาวน์โหลดรายงานภาพรวมชั้นเรียน/โรงเรียน (พร้อมแถบสรุปท้ายไฟล์ - ข้อ 3)
+    // 📌 1. ปุ่มดาวน์โหลดหลัก: ตรวจสอบโหมดรายวิชา (สรุปทุกวิชา VS เฉพาะรายวิชา)
     function downloadAnalyticsCSV() {
-      if (!rawAnalyticsRecords || rawAnalyticsRecords.length === 0) { alert("ไม่มีข้อมูลสำหรับการดาวน์โหลด"); return; }
+      if (!rawAnalyticsRecords || rawAnalyticsRecords.length === 0) { 
+        alert("ไม่มีข้อมูลสำหรับการดาวน์โหลด"); 
+        return; 
+      }
       
+      let filterSel = document.getElementById('subjectFilterSelect');
+      let selectedSubjectFilter = filterSel ? filterSel.value : 'all';
+
+      // 🎯 เงื่อนไข 1: อยู่หน้ารายวิชา + เลือก "ดูสรุปทุกรายวิชา (all)" -> ดาวน์โหลด มส. รวมทุกวิชา
+      if (currentAnalyticsSubView === 'subject' && selectedSubjectFilter === 'all') {
+        exportMSStudentsReport();
+        return;
+      }
+
+      // 🎯 เงื่อนไข 2: อยู่หน้ารายวิชา + เลือก "เจาะจงรายวิชา" -> ดาวน์โหลด มส. เฉพาะวิชานั้น
+      if (currentAnalyticsSubView === 'subject' && selectedSubjectFilter !== 'all') {
+        exportSingleSubjectMSReport(selectedSubjectFilter);
+        return;
+      }
+
+      // กรณีอื่นๆ (เช่น หน้ารายห้อง / รายบุคคล) ดาวน์โหลดรายการตามปกติ
       let present = 0, late = 0, leave = 0, absent = 0, skip = 0;
       let csvContent = "\uFEFFวันที่,วัน,ช่วงเวลา/คาบ,ชั้นเรียน,วิชา,รหัส,ชื่อ-นามสกุล,สถานะ\n";
       
       rawAnalyticsRecords.forEach(r => {
-        let st = r.status.trim();
+        let st = (r.status || '').trim();
         if (st === 'มา' || st === 'มาเรียน') present++;
         else if (st === 'สาย') late++;
         else if (st === 'ลา') leave++;
@@ -1098,7 +1148,6 @@
         csvContent += `"${r.date}","${r.day}","${r.session}","${r.className}","${r.subject}","${r.stuId}","${r.stuName}","${r.status}"\n`;
       });
 
-      // 📊 สรุปสถิติมุมมองรวมท้ายไฟล์ (Summary Row)
       csvContent += "\n";
       csvContent += `"=","=","=","=","=","=","=","="\n`;
       csvContent += `"สรุปภาพรวมทั้งหมด","รายการทั้งหมด ${rawAnalyticsRecords.length} รายการ","มาเรียน: ${present}","สาย: ${late}","ลา: ${leave}","ขาดเรียน: ${absent}","หนีเรียน: ${skip}","อัตราเข้าเรียน: ${(((present+late)/rawAnalyticsRecords.length)*100).toFixed(1)}%"\n`;
@@ -1107,7 +1156,7 @@
       let link = document.createElement("a");
       let url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `รายงานสถิติเช็คชื่อภาพรวม_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `รายงานสถิติเช็คชื่อ_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1546,6 +1595,170 @@
           currentAdminPassword = pwd;
         }
       }).deleteAttendanceOlderThanSixMonths(pwd);
+    }
+
+    // 📌 ฟังก์ชันดาวน์โหลดรายงานนักเรียนติด มส. แยกกลุ่มตามรายวิชา
+    function exportMSStudentsReport() {
+      let currentClass = document.getElementById('analysisClassSelect').value || "ทุกห้อง";
+      let subjectSummary = {};
+
+      // 1. จัดกลุ่มและคำนวณสถิติแยกรายวิชา -> แยกรายบุคคล
+      rawAnalyticsRecords.forEach(r => {
+        let lineSessions = ['เข้าแถวเช้า', 'เข้าแถวเที่ยง', 'เข้าแถวเย็น'];
+        if (lineSessions.includes((r.session || '').trim())) return; // ไม่นำเข้าแถวมารวมในวิชาเรียน
+
+        let subj = r.subject || "กิจกรรมทั่วไป";
+        let stuKey = r.stuName || r.stuId;
+        if (!stuKey) return;
+
+        if (!subjectSummary[subj]) subjectSummary[subj] = {};
+        if (!subjectSummary[subj][stuKey]) {
+          subjectSummary[subj][stuKey] = {
+            id: r.stuId || '-',
+            name: r.stuName,
+            classRoom: r.className || currentClass,
+            totalClasses: 0,
+            present: 0,
+            absent: 0
+          };
+        }
+
+        subjectSummary[subj][stuKey].totalClasses++;
+        let st = (r.status || '').trim();
+        if (st === 'มา' || st === 'มาเรียน' || st === 'สาย') {
+          subjectSummary[subj][stuKey].present++;
+        } else if (st === 'ขาด' || st === 'ขาดเรียน' || st === 'หนีเรียน') {
+          subjectSummary[subj][stuKey].absent++;
+        }
+      });
+
+      // 2. สร้างโครงสร้างเนื้อหาไฟล์ CSV แยกตามหัวข้อรายวิชา
+      let csvContent = "\uFEFF";
+      let hasAnyMS = false;
+
+      Object.keys(subjectSummary).forEach(subj => {
+        let studentsInSubj = subjectSummary[subj];
+        let msList = [];
+
+        Object.keys(studentsInSubj).forEach(key => {
+          let s = studentsInSubj[key];
+          let rate = (s.totalClasses > 0) ? (s.present / s.totalClasses) * 100 : 100;
+          if (rate < 80.0) {
+            msList.push({
+              id: s.id,
+              name: s.name,
+              classRoom: s.classRoom,
+              total: s.totalClasses,
+              present: s.present,
+              absent: s.absent,
+              rate: rate.toFixed(1) + '%'
+            });
+          }
+        });
+
+        // ถ้าวิชานี้มีเด็กติด มส. ให้เพิ่มหัวข้อรายวิชาและตารางนักเรียนวิชานั้นๆ
+        if (msList.length > 0) {
+          hasAnyMS = true;
+          csvContent += `\n"=== รายวิชา: ${subj} ===",,,,,,,,\n`;
+          csvContent += "ลำดับ,รหัสประจำตัว,ชื่อ-นามสกุล,ระดับชั้น,คาบเรียนทั้งหมด,มาเรียน (ครั้ง),ขาด/หนี (ครั้ง),อัตราเข้าเรียน,ผลประเมิน\n";
+          
+          msList.forEach((s, idx) => {
+            csvContent += `"${idx + 1}","${s.id}","${s.name}","${s.classRoom}","${s.total}","${s.present}","${s.absent}","${s.rate}","ติด มส."\n`;
+          });
+          csvContent += "\n"; // เว้นบรรทัดระหว่างรายวิชา
+        }
+      });
+
+      if (!hasAnyMS) {
+        alert("🎉 ไม่พบนักเรียนที่ติด มส. ในรายวิชาใดๆ (ทุกคนมีเวลาเรียนผ่านเกณฑ์ 80% ขึ้นไป)");
+        return;
+      }
+
+      // 3. ส่งออกไฟล์ CSV
+      let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      let link = document.createElement("a");
+      let url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `รายงานนักเรียนติด_มส_แยกรายวิชา_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // 📌 2. ฟังก์ชันดาวน์โหลดรายงาน มส. "เฉพาะวิชาที่เลือก"
+    function exportSingleSubjectMSReport(subjectName) {
+      let currentClass = document.getElementById('analysisClassSelect').value || "ทุกห้อง";
+      let studentMap = {};
+
+      // 1. กรองเฉพาะบันทึกของวิชาที่เลือก
+      rawAnalyticsRecords.forEach(r => {
+        let subj = r.subject || "กิจกรรมทั่วไป";
+        if (subj !== subjectName) return; // เอาเฉพาะวิชาที่ตรงกัน
+
+        let stuKey = r.stuName || r.stuId;
+        if (!stuKey) return;
+
+        if (!studentMap[stuKey]) {
+          studentMap[stuKey] = {
+            id: r.stuId || '-',
+            name: r.stuName,
+            classRoom: r.className || currentClass,
+            totalClasses: 0,
+            present: 0,
+            absent: 0
+          };
+        }
+
+        studentMap[stuKey].totalClasses++;
+        let st = (r.status || '').trim();
+        if (st === 'มา' || st === 'มาเรียน' || st === 'สาย') {
+          studentMap[stuKey].present++;
+        } else if (st === 'ขาด' || st === 'ขาดเรียน' || st === 'หนีเรียน') {
+          studentMap[stuKey].absent++;
+        }
+      });
+
+      // 2. คัดกรองนักเรียนที่อัตราเข้าเรียน < 80% ในวิชานี้
+      let msList = [];
+      Object.keys(studentMap).forEach(key => {
+        let s = studentMap[key];
+        let rate = (s.totalClasses > 0) ? (s.present / s.totalClasses) * 100 : 100;
+        if (rate < 80.0) {
+          msList.push({
+            id: s.id,
+            name: s.name,
+            classRoom: s.classRoom,
+            total: s.totalClasses,
+            present: s.present,
+            absent: s.absent,
+            rate: rate.toFixed(1) + '%'
+          });
+        }
+      });
+
+      if (msList.length === 0) {
+        alert(`🎉 ไม่พบนักเรียนที่ติด มส. ในวิชา "${subjectName}" (ทุกคนมีเวลาเรียนผ่านเกณฑ์ 80% ขึ้นไป)`);
+        return;
+      }
+
+      // 3. สร้างไฟล์ CSV สรุปเฉพาะวิชาที่เลือก
+      let csvContent = "\uFEFF";
+      csvContent += `"=== รายงานสรุปนักเรียนติด มส. วิชา: ${subjectName} ===",,,,,,,,\n\n`;
+      csvContent += "ลำดับ,รหัสประจำตัว,ชื่อ-นามสกุล,ระดับชั้น,คาบเรียนทั้งหมด,มาเรียน (ครั้ง),ขาด/หนี (ครั้ง),อัตราเข้าเรียน,ผลประเมิน\n";
+
+      msList.forEach((s, idx) => {
+        csvContent += `"${idx + 1}","${s.id}","${s.name}","${s.classRoom}","${s.total}","${s.present}","${s.absent}","${s.rate}","ติด มส."\n`;
+      });
+
+      let cleanFileName = subjectName.replace(/[/\\?%*:|"<>]/g, '_');
+      let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      let link = document.createElement("a");
+      let url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `รายงาน_มส_${cleanFileName}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   </script>
 </body>
