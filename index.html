@@ -255,21 +255,24 @@
 
   </div> <!-- สิ้นสุด .container -->
 
-  <!-- 🔍 Modal ดูประวัติ & สถิติรายบุคคล -->
+<!-- 🔍 Modal ดูประวัติ & สถิติรายบุคคล -->
   <div class="modal fade" id="studentDetailModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content" style="background:#1e293b; color:#fff; border-radius:16px;">
-        <div class="modal-header border-secondary">
-          <h6 class="modal-title fw-bold" id="detailModalTitle"><i class="bi bi-person-badge text-info me-2"></i> สถิติและประวัติรายบุคคล</h6>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="modal-header border-secondary d-flex justify-content-between align-items-center">
+          <h6 class="modal-title fw-bold text-white mb-0" id="detailModalTitle">
+            <i class="bi bi-person-badge text-info me-2"></i> สถิติและประวัติรายบุคคล
+          </h6>
+          <div class="d-flex align-items-center gap-2">
+            <!-- 📌 ปุ่มดาวน์โหลดสถิติรายบุคคล ย้ายมาวางข้างปุ่มกากบาท -->
+            <button type="button" class="btn btn-sm btn-outline-success fw-bold" id="btnDownloadSingleStudent" onclick="downloadSingleStudentCSV()">
+              <i class="bi bi-download me-1"></i> ดาวน์โหลด (.xls)
+            </button>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
         </div>
         <div class="modal-body" id="detailModalBody">
           <div class="loading">กำลังโหลดข้อมูล...</div>
-        </div>
-        <div class="modal-footer border-secondary">
-          <button type="button" class="btn btn-outline-success btn-sm fw-bold w-100" id="btnDownloadSingleStudent" onclick="downloadSingleStudentCSV()">
-            <i class="bi bi-download me-1"></i> ดาวน์โหลดสถิตินี้ (CSV)
-          </button>
         </div>
       </div>
     </div>
@@ -724,9 +727,37 @@
       container.innerHTML = html;
     }
 
-    function renderSubjectAnalytics(container) {
-      if (rawAnalyticsRecords.length === 0) { container.innerHTML = '<div class="loading">📄 ไม่พบข้อมูล</div>'; return; }
+    // 📌 ฟังก์ชันแมปไอคอน/อีโมจิประจำรายวิชาตามชื่อวิชา
+    function getSubjectIcon(subjName) {
+      if (!subjName) return '📚';
+      const name = subjName.toString().trim();
+      
+      if (name.includes('เข้าแถว') || name.includes('อบรม')) return '🚩';
+      if (name.includes('ไทย')) return '📖';
+      if (name.includes('คณิต')) return '📐';
+      if (name.includes('วิทยาศาสตร์') && !name.includes('คำนวณ')) return '🔬';
+      if (name.includes('คำนวณ') || name.includes('คอมพิวเตอร์')) return '💻';
+      if (name.includes('อังกฤษ')) return '🔤';
+      if (name.includes('สังคม')) return '🌍';
+      if (name.includes('ประวัติ')) return '📜';
+      if (name.includes('สุขศึกษา') || name.includes('พล')) return '⚽';
+      if (name.includes('ศิลป์') || name.includes('ดนตรี') || name.includes('นาฏศิลป์')) return '🎨';
+      if (name.includes('การงาน')) return '🛠️';
+      if (name.includes('แนะแนว')) return '💡';
+      if (name.includes('ลูกเสือ') || name.includes('จิตอาสา') || name.includes('บำเพ็ญ')) return '⚜️';
+      if (name.includes('เศรษฐกิจพอเพียง')) return '🌱';
+      
+      return '📚';
+    }
 
+    // 📌 ปรับปรุง Analytics รายวิชา (เพิ่มดรอปดาวน์กรองวิชา + ไอคอนตรงวิชา)
+    function renderSubjectAnalytics(container) {
+      if (!rawAnalyticsRecords || rawAnalyticsRecords.length === 0) { 
+        container.innerHTML = '<div class="loading">📄 ไม่พบข้อมูล</div>'; 
+        return; 
+      }
+
+      // 1. จัดกลุ่มข้อมูลแยกตามรายวิชา
       let subjectMap = {};
       rawAnalyticsRecords.forEach(r => {
         let subj = r.subject || "กิจกรรมทั่วไป";
@@ -742,26 +773,73 @@
         }
       });
 
-      let html = `<div class="alert alert-dark border-secondary p-2 mb-3 text-center fw-bold"><i class="bi bi-journal-text text-info me-1"></i> ข้อมูลรายวิชา และกลุ่มเสี่ยง มส.</div>`;
+      let allSubjects = Object.keys(subjectMap);
+      let selectedSubjectFilter = document.getElementById('subjectFilterSelect') ? document.getElementById('subjectFilterSelect').value : 'all';
 
-      for (let subj in subjectMap) {
+      // 2. สร้างแถบกรองดรอปดาวน์เลือกดูเฉพาะรายวิชา
+      let html = `<div class="custom-card p-2 mb-3 bg-dark border-secondary">
+                    <div class="row align-items-center g-2">
+                      <div class="col-12 col-md-5 text-start">
+                        <label class="form-label text-info fw-bold small mb-0"><i class="bi bi-filter-circle me-1"></i> เลือกดูเฉพาะรายวิชา:</label>
+                      </div>
+                      <div class="col-12 col-md-7">
+                        <select id="subjectFilterSelect" class="form-select form-select-sm bg-dark text-white border-secondary fw-bold" onchange="renderSubjectAnalytics(document.getElementById('analyticsResultArea'))">
+                          <option value="all" ${selectedSubjectFilter === 'all' ? 'selected' : ''}>🌐 ดูสรุปทุกรายวิชา (${allSubjects.length} วิชา)</option>`;
+      
+      allSubjects.forEach(sName => {
+        let icon = getSubjectIcon(sName);
+        let isSel = (selectedSubjectFilter === sName) ? 'selected' : '';
+        html += `<option value="${sName}" ${isSel}>${icon} ${sName}</option>`;
+      });
+
+      html += `         </select>
+                      </div>
+                    </div>
+                  </div>`;
+
+      // 3. กรองรายวิชาตามที่เลือก
+      let displaySubjects = (selectedSubjectFilter === 'all') 
+        ? allSubjects 
+        : allSubjects.filter(s => s === selectedSubjectFilter);
+
+      if (displaySubjects.length === 0) {
+        html += `<div class="p-3 text-center text-muted">ไม่พบข้อมูลรายวิชาที่เลือก</div>`;
+      }
+
+      // 4. เรนเดอร์การ์ดแสดงผลสถิติรายวิชา
+      displaySubjects.forEach(subj => {
         let sData = subjectMap[subj];
-        let subRate = ((sData.present / sData.total) * 100).toFixed(1);
+        let subRate = parseFloat(((sData.present / sData.total) * 100).toFixed(1));
+        let barClass = subRate >= 80 ? 'bg-info' : 'bg-warning';
+        let subjIcon = getSubjectIcon(subj);
         
         html += `<div class="mb-4">
-                  <h6 class="fw-bold text-info border-bottom border-secondary pb-1"><i class="bi bi-book me-1"></i> ${subj} <small class="text-white">(เข้าเรียน ${subRate}%)</small></h6>
-                  <div class="table-wrapper"><table><thead><tr><th>ชั้น</th><th>ชื่อ-สกุล (ติด มส.)</th><th>%</th></tr></thead><tbody>`;
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="fw-bold text-info mb-0">${subjIcon} ${subj}</h6>
+                    <small class="text-white fw-bold">เข้าเรียนรวม ${subRate}%</small>
+                  </div>
+                  <div class="progress mb-2" style="height: 6px; background-color: rgba(255,255,255,0.1);">
+                    <div class="progress-bar ${barClass}" style="width: ${subRate}%;"></div>
+                  </div>
+                  <div class="table-wrapper"><table><thead><tr><th>ชั้น</th><th>ชื่อ-สกุล (ติด มส.)</th><th>% เวลาเรียน</th></tr></thead><tbody>`;
 
         let riskCount = 0;
         for (let sName in sData.students) {
           let st = sData.students[sName];
-          let pRate = ((st.present / st.total) * 100).toFixed(1);
+          let pRate = parseFloat(((st.present / st.total) * 100).toFixed(1));
           if (pRate < 80.0) {
             riskCount++;
             html += `<tr>
                       <td>${document.getElementById('analysisClassSelect').value}</td>
-                      <td><b>${sName}</b></td>
-                      <td><span class="badge-bw-fail">${pRate}%</span></td>
+                      <td class="text-start"><b>${sName}</b></td>
+                      <td>
+                        <div class="d-flex align-items-center justify-content-center gap-2">
+                          <div class="progress flex-grow-1" style="height: 6px; width: 50px; background-color: rgba(255,255,255,0.1);">
+                            <div class="progress-bar bg-danger" style="width: ${pRate}%;"></div>
+                          </div>
+                          <span class="badge-bw-fail">${pRate}%</span>
+                        </div>
+                      </td>
                     </tr>`;
           }
         }
@@ -771,7 +849,7 @@
         }
 
         html += `</tbody></table></div></div>`;
-      }
+      });
 
       container.innerHTML = html;
     }
@@ -884,6 +962,7 @@
       container.innerHTML = html;
     }
 
+    // 📌 ฟังก์ชัน Modal รายบุคคล (แยกสี มา-สาย-ขาด-หนี และเปลี่ยนสีอัตราเข้าร่วม dynamic)
     function openStudentDetailModal(studentName) {
       activeModalStudentName = studentName;
       document.getElementById('detailModalTitle').innerText = 'สถิติและประวัติ: ' + studentName;
@@ -900,21 +979,44 @@
           lineTotal++;
           let st = r.status.trim();
           if (st === 'มา' || st === 'มาเรียน') linePresent++;
-          else if (st === 'สาย') { lineLate++; linePresent++; }
+          else if (st === 'สาย') lineLate++;
           else if (st === 'ขาด' || st === 'ขาดเรียน') lineAbsent++;
           else if (st === 'ลา') lineLeave++;
           else if (st === 'หนีเรียน') lineSkip++;
         }
       });
 
-      let lineRate = lineTotal > 0 ? ((linePresent / lineTotal) * 100).toFixed(1) : "0.0";
+      // คำนวณอัตราการเข้าร่วม (% เข้าเรียนรวมสาย)
+      let attendedTotal = linePresent + lineLate;
+      let lineRateNum = lineTotal > 0 ? parseFloat(((attendedTotal / lineTotal) * 100).toFixed(1)) : 0;
+      
+      // เงื่อนไขสีตัวเลขอัตราการเข้าร่วม (< 80% สีแดง / >= 80% สีเขียว)
+      let rateColorClass = lineRateNum >= 80 ? 'text-success' : 'text-danger';
+      let lineProgressBg = lineRateNum >= 80 ? 'bg-success' : 'bg-danger';
 
       let html = `<div class="stat-box p-3 mb-3 border-info">
-                    <h6 class="fw-bold text-info border-bottom border-secondary pb-1"><i class="bi bi-flag-fill me-1"></i> สถิติการเข้าร่วมกิจกรรมเข้าแถว (เช้า/เที่ยง/เย็น)</h6>
-                    <div class="row g-2 text-center mt-1">
-                      <div class="col-4"><small class="text-muted">มาเรียน/สาย</small><div class="fw-bold text-success">${linePresent}/${lineTotal}</div></div>
-                      <div class="col-4"><small class="text-muted">ขาด/หนีแถว</small><div class="fw-bold text-danger">${lineAbsent + lineSkip}</div></div>
-                      <div class="col-4"><small class="text-muted">อัตราเข้าร่วม</small><div class="fw-bold text-info">${lineRate}%</div></div>
+                    <h6 class="fw-bold text-info border-bottom border-secondary pb-2"><i class="bi bi-flag-fill me-1"></i> สถิติการเข้าร่วมกิจกรรมเข้าแถว (เช้า/เที่ยง/เย็น)</h6>
+                    <div class="row g-2 text-center mt-2 mb-2">
+                      <div class="col-3">
+                        <div class="text-white fw-bold small">มาเรียน</div>
+                        <div class="fw-bold text-success fs-4 mt-1">${linePresent}</div>
+                      </div>
+                      <div class="col-3">
+                        <div class="text-white fw-bold small">สาย</div>
+                        <div class="fw-bold text-warning fs-4 mt-1">${lineLate}</div>
+                      </div>
+                      <div class="col-3">
+                        <div class="text-white fw-bold small">ขาด/หนีแถว</div>
+                        <div class="fw-bold text-danger fs-4 mt-1">${lineAbsent + lineSkip}</div>
+                      </div>
+                      <div class="col-3">
+                        <div class="text-white fw-bold small">อัตราเข้าร่วม</div>
+                        <div class="fw-bold ${rateColorClass} fs-4 mt-1">${lineRateNum}%</div>
+                      </div>
+                    </div>
+                    <!-- Progress Bar แสดงระดับสถิติ -->
+                    <div class="progress mt-2" style="height: 10px; background-color: rgba(255,255,255,0.1);">
+                      <div class="progress-bar ${lineProgressBg}" role="progressbar" style="width: ${lineRateNum}%;" aria-valuenow="${lineRateNum}" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                   </div>`;
 
@@ -922,32 +1024,53 @@
       studentRecords.forEach(r => {
         if (!lineSessions.includes(r.session.trim())) {
           let subj = r.subject || "ทั่วไป";
-          if (!subjectStats[subj]) subjectStats[subj] = { total: 0, present: 0, absent: 0, skip: 0 };
+          if (!subjectStats[subj]) subjectStats[subj] = { total: 0, present: 0, absent: 0, skip: 0, late: 0 };
           subjectStats[subj].total++;
-          if (r.status === 'มา' || r.status === 'มาเรียน' || r.status === 'สาย') subjectStats[subj].present++;
+          if (r.status === 'มา' || r.status === 'มาเรียน') subjectStats[subj].present++;
+          else if (r.status === 'สาย') subjectStats[subj].late++;
           else if (r.status === 'ขาด' || r.status === 'ขาดเรียน') subjectStats[subj].absent++;
           else if (r.status === 'หนีเรียน') subjectStats[subj].skip++;
         }
       });
 
       html += `<h6 class="fw-bold text-info mb-2">สรุปเวลาเรียนแยกรายวิชา</h6>`;
-      html += `<div class="table-wrapper mb-3"><table><thead><tr><th>วิชา</th><th>มาเรียน</th><th>ขาด/หนี</th><th>คิดเป็น</th></tr></thead><tbody>`;
+      html += `<div class="table-wrapper mb-3"><table><thead><tr><th>วิชา</th><th>มาเรียน</th><th>สาย</th><th>ขาด/หนี</th><th>คิดเป็น (Progress)</th></tr></thead><tbody>`;
       for (let subj in subjectStats) {
         let st = subjectStats[subj];
-        let rate = ((st.present / st.total) * 100).toFixed(1);
+        let attendedSubj = st.present + st.late;
+        let rate = parseFloat(((attendedSubj / st.total) * 100).toFixed(1));
+        
+        // แยกสีแสดง % รายวิชา
+        let subjRateColorClass = rate >= 80 ? 'text-success' : 'text-danger';
         let badge = rate < 80 ? `<span class="badge-bw-fail">${rate}% (มส.)</span>` : `<span class="badge-bw-pass">${rate}%</span>`;
-        html += `<tr><td>${subj}</td><td>${st.present}/${st.total}</td><td>${st.absent + st.skip}</td><td>${badge}</td></tr>`;
+        let barBg = rate >= 80 ? 'bg-success' : 'bg-danger';
+
+        html += `<tr>
+                  <td class="text-start"><b>${subj}</b></td>
+                  <td class="text-success fw-bold">${st.present}</td>
+                  <td class="text-warning fw-bold">${st.late}</td>
+                  <td class="text-danger fw-bold">${st.absent + st.skip}</td>
+                  <td style="min-width: 140px;">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="progress flex-grow-1" style="height: 8px; background-color: rgba(255,255,255,0.1);">
+                        <div class="progress-bar ${barBg}" style="width: ${rate}%;"></div>
+                      </div>
+                      <small>${badge}</small>
+                    </div>
+                  </td>
+                </tr>`;
       }
       html += `</tbody></table></div>`;
 
-      let problemRecords = studentRecords.filter(r => r.status === 'ขาด' || r.status === 'ขาดเรียน' || r.status === 'หนีเรียน');
-      html += `<h6 class="fw-bold text-danger mb-2">ประวัติการขาด/หนีเรียน</h6>`;
+      let problemRecords = studentRecords.filter(r => r.status === 'ขาด' || r.status === 'ขาดเรียน' || r.status === 'หนีเรียน' || r.status === 'สาย');
+      html += `<h6 class="fw-bold text-danger mb-2">ประวัติการ ขาด / หนีเรียน / สาย</h6>`;
       if (problemRecords.length === 0) {
-        html += `<div class="p-3 text-center text-success fw-bold">🎉 ไม่มีประวัติการขาดหรือหนีเรียน</div>`;
+        html += `<div class="p-3 text-center text-success fw-bold">🎉 ไม่พบประวัติการขาด หนีเรียน หรือสาย</div>`;
       } else {
         html += `<div class="table-wrapper"><table><thead><tr><th>วัน/เวลา</th><th>คาบ</th><th>วิชา</th><th>สถานะ</th></tr></thead><tbody>`;
         problemRecords.forEach(pr => {
-          html += `<tr><td>${pr.date}</td><td>${pr.session}</td><td>${pr.subject}</td><td class="text-danger fw-bold">${pr.status}</td></tr>`;
+          let stColor = pr.status === 'สาย' ? 'text-warning' : 'text-danger';
+          html += `<tr><td>${pr.date}</td><td>${pr.session}</td><td class="text-start">${pr.subject}</td><td class="${stColor} fw-bold">${pr.status}</td></tr>`;
         });
         html += `</tbody></table></div>`;
       }
@@ -957,24 +1080,41 @@
       detailModal.show();
     }
 
+    // 📌 1. ดาวน์โหลดรายงานภาพรวมชั้นเรียน/โรงเรียน (พร้อมแถบสรุปท้ายไฟล์ - ข้อ 3)
     function downloadAnalyticsCSV() {
       if (!rawAnalyticsRecords || rawAnalyticsRecords.length === 0) { alert("ไม่มีข้อมูลสำหรับการดาวน์โหลด"); return; }
       
+      let present = 0, late = 0, leave = 0, absent = 0, skip = 0;
       let csvContent = "\uFEFFวันที่,วัน,ช่วงเวลา/คาบ,ชั้นเรียน,วิชา,รหัส,ชื่อ-นามสกุล,สถานะ\n";
+      
       rawAnalyticsRecords.forEach(r => {
+        let st = r.status.trim();
+        if (st === 'มา' || st === 'มาเรียน') present++;
+        else if (st === 'สาย') late++;
+        else if (st === 'ลา') leave++;
+        else if (st === 'ขาด' || st === 'ขาดเรียน') absent++;
+        else if (st === 'หนีเรียน') skip++;
+
         csvContent += `"${r.date}","${r.day}","${r.session}","${r.className}","${r.subject}","${r.stuId}","${r.stuName}","${r.status}"\n`;
       });
+
+      // 📊 สรุปสถิติมุมมองรวมท้ายไฟล์ (Summary Row)
+      csvContent += "\n";
+      csvContent += `"=","=","=","=","=","=","=","="\n`;
+      csvContent += `"สรุปภาพรวมทั้งหมด","รายการทั้งหมด ${rawAnalyticsRecords.length} รายการ","มาเรียน: ${present}","สาย: ${late}","ลา: ${leave}","ขาดเรียน: ${absent}","หนีเรียน: ${skip}","อัตราเข้าเรียน: ${(((present+late)/rawAnalyticsRecords.length)*100).toFixed(1)}%"\n`;
 
       let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       let link = document.createElement("a");
       let url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `รายงานสถิติเช็คชื่อ_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `รายงานสถิติเช็คชื่อภาพรวม_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
 
+    // 📌 2. ดาวน์โหลดรายงานสถิติรายบุคคล (จัดฟอร์แมต Excel สวยงาม มีสีสัน - ข้อ 1)
+    // 📌 ดาวน์โหลดรายงานสถิติรายบุคคล (จัดระยะลงชื่อตรงตามแนวคอลัมน์ ไม่เว้นบรรทัด)
     function downloadSingleStudentCSV() {
       if (!activeModalStudentName) return;
       let studentRecords = rawAnalyticsRecords.filter(r => r.stuName === activeModalStudentName);
@@ -984,18 +1124,7 @@
       let className = studentRecords[0].className || document.getElementById('analysisClassSelect').value;
       let todayStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
 
-      let csvContent = "\uFEFF";
-      csvContent += "====================================================================================================\n";
-      csvContent += "                                      โรงเรียนบ้านนาโพธิ์                                      \n";
-      csvContent += "                         รายงานสรุปสถิติการเข้าเรียนและระเบียบวินัยรายบุคคล                         \n";
-      csvContent += "====================================================================================================\n\n";
-      
-      csvContent += "[ ข้อมูลนักเรียน ]\n";
-      csvContent += `ชื่อ - นามสกุล: "${activeModalStudentName}"\n`;
-      csvContent += `ระดับชั้นเรียน: "ชั้น ${className}"\n`;
-      csvContent += `รหัสประจำตัว: "${studentId}"\n`;
-      csvContent += `วันที่ออกเอกสาร: "${todayStr}"\n\n`;
-
+      // คำนวณสถิติเข้าแถว
       let lineSessions = ['เข้าแถวเช้า', 'เข้าแถวเที่ยง', 'เข้าแถวเย็น'];
       let lineTotal = 0, linePresent = 0, lineAbsent = 0, lineSkip = 0;
       let studentDayMap = {};
@@ -1019,12 +1148,12 @@
 
       let uniqueRiskDays = Object.keys(studentDayMap).length;
       let lineRate = lineTotal > 0 ? ((linePresent / lineTotal) * 100).toFixed(1) : "0.0";
-      let lineStatusText = uniqueRiskDays >= 5 ? "⚠️ กลุ่มเสี่ยงด้านวินัย (ขาด/หนีแถว >= 5 วัน)" : "ปกติ (ผ่านเกณฑ์)";
+      let isRisk = uniqueRiskDays >= 5;
+      let lineStatusText = isRisk 
+        ? `⚠️ กลุ่มเสี่ยงด้านวินัย (ขาด/หนีแถว ≥ 5 วัน)` 
+        : `ปกติ (ผ่านเกณฑ์)`;
 
-      csvContent += "[ หมวดที่ 1: สรุปสถิติการเข้าร่วมกิจกรรมเข้าแถว (เช้า / เที่ยง / เย็น) ]\n";
-      csvContent += "รายการกิจกรรม, จำนวนรวม (ครั้ง), มาเรียน/สาย (ครั้ง), ขาด/หนีแถว (ครั้ง), อัตราการเข้าร่วม (%), สถานะการประเมิน\n";
-      csvContent += `"กิจกรรมเข้าแถวเคารพธงชาติและอบรมประจำวัน","${lineTotal}","${linePresent}","${lineAbsent + lineSkip}","${lineRate}%","${lineStatusText}"\n\n`;
-
+      // คำนวณสถิติรายวิชา
       let subjectStats = {};
       studentRecords.forEach(r => {
         if (!lineSessions.includes(r.session.trim())) {
@@ -1037,45 +1166,173 @@
         }
       });
 
-      csvContent += "[ หมวดที่ 2: สรุปเวลาเรียนแยกตามรายวิชา ]\n";
-      csvContent += "ชื่อรายวิชา / กิจกรรมเรียน, เวลาเรียนทั้งหมด (คาบ), มาเรียน (คาบ), ขาด/หนี (คาบ), ร้อยละเวลาเรียน (%), ผลการประเมินเวลาเรียน\n";
+      let excelHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+          <!--[if gte mso 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>รายงานสถิติรายบุคคล</x:Name>
+                  <x:WorksheetOptions>
+                    <x:Print>
+                      <x:ValidPrinterInfo/>
+                      <x:PaperSizeIndex>9</x:PaperSizeIndex>
+                      <x:Scale>100</x:Scale>
+                      <x:FitWidth>1</x:FitWidth>
+                      <x:FitHeight>0</x:FitHeight>
+                    </x:Print>
+                    <x:PageSetup>
+                      <x:Layout x:Orientation="Portrait"/>
+                      <x:Header x:Margin="0.3"/>
+                      <x:Footer x:Margin="0.3"/>
+                      <x:PageMargins x:Bottom="0.5" x:Left="0.5" x:Right="0.5" x:Top="0.5"/>
+                    </x:PageSetup>
+                  </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 1cm;
+            }
+            body, table, td, th { 
+              font-family: 'TH Sarabun PSK', 'TH Sarabun IT๙', 'THSarabunNew', 'Angsana New', sans-serif; 
+              font-size: 16pt; 
+              line-height: 1.25;
+              color: #000000;
+              background-color: #ffffff;
+            }
+            table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+            th, td { border: 1px solid #000000; padding: 4px 6px; text-align: center; vertical-align: middle; word-wrap: break-word; }
+            
+            .clean-title { font-size: 20pt; font-weight: bold; border: none; text-align: center; }
+            .clean-subtitle { font-size: 16pt; font-weight: bold; border: none; text-align: center; }
+            .section-title { background-color: #f1f5f9; font-size: 16pt; font-weight: bold; text-align: left; padding: 4px 8px; }
+            .bg-label { background-color: #ffffff; font-weight: bold; text-align: right; }
+            .no-border { border: none !important; }
+            .sign-cell { border: none !important; text-align: left !important; vertical-align: top !important; padding-top: 15px; padding-left: 10px; }
+          </style>
+        </head>
+        <body>
+          <table>
+            <colgroup>
+              <col style="width: 12%;">
+              <col style="width: 28%;">
+              <col style="width: 15%;">
+              <col style="width: 15%;">
+              <col style="width: 15%;">
+              <col style="width: 15%;">
+            </colgroup>
+
+            <!-- หัวกระดาษทางการ -->
+            <tr><td colspan="6" class="clean-title no-border" style="padding-top: 15px;">โรงเรียนบ้านนาโพธิ์</td></tr>
+            <tr><td colspan="6" class="clean-subtitle no-border">รายงานสรุปสถิติการเข้าเรียนและระเบียบวินัยรายบุคคล</td></tr>
+            <tr><td colspan="6" class="no-border" style="height:10px;"></td></tr>
+            
+            <!-- ข้อมูลนักเรียน -->
+            <tr><td colspan="6" class="section-title">ข้อมูลนักเรียน</td></tr>
+            <tr>
+              <td class="bg-label">ชื่อ-นามสกุล:</td><td style="text-align:left;"><b>${activeModalStudentName}</b></td>
+              <td class="bg-label">ระดับชั้น:</td><td style="text-align:left;">ชั้น ${className}</td>
+              <td class="bg-label">รหัสประจำตัว:</td><td style="text-align:left;">${studentId}</td>
+            </tr>
+            <tr>
+              <td class="bg-label">วันที่ออกเอกสาร:</td><td colspan="5" style="text-align:left;">${todayStr}</td>
+            </tr>
+            <tr><td colspan="6" class="no-border" style="height:10px;"></td></tr>
+
+            <!-- หมวด 1: กิจกรรมเข้าแถว -->
+            <tr><td colspan="6" class="section-title">1. สรุปสถิติการเข้าร่วมกิจกรรมเข้าแถว (เช้า / เที่ยง / เย็น)</td></tr>
+            <tr style="background-color: #f8fafc; font-weight:bold;">
+              <td colspan="2">รายการกิจกรรม</td><td>จำนวนรวม</td><td>มาเรียน/สาย</td><td>ขาด/หนีแถว</td><td>ผลการประเมิน</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="text-align:left;">กิจกรรมเข้าแถวเคารพธงชาติและอบรมประจำวัน</td>
+              <td>${lineTotal} ครั้ง</td><td>${linePresent} ครั้ง</td><td>${lineAbsent + lineSkip} ครั้ง</td>
+              <td><b>${lineStatusText}</b></td>
+            </tr>
+            <tr><td colspan="6" class="no-border" style="height:10px;"></td></tr>
+
+            <!-- หมวด 2: รายวิชา -->
+            <tr><td colspan="6" class="section-title">2. สรุปเวลาเรียนแยกตามรายวิชา</td></tr>
+            <tr style="background-color: #f8fafc; font-weight:bold;">
+              <td colspan="2">ชื่อรายวิชา / กิจกรรมเรียน</td><td>เวลาทั้งหมด</td><td>มาเรียน</td><td>ขาด/หนี</td><td>ผลการประเมินเวลาเรียน</td>
+            </tr>`;
 
       let hasSubjects = false;
       for (let subj in subjectStats) {
         hasSubjects = true;
         let st = subjectStats[subj];
         let rate = ((st.present / st.total) * 100).toFixed(1);
-        let evalResult = rate < 80.0 ? "⚠️ ติด มส. (เวลาเรียนต่ำกว่า 80%)" : "ผ่านเกณฑ์เวลาเรียน";
-        csvContent += `"${subj}","${st.total}","${st.present}","${st.absent + st.skip}","${rate}%","${evalResult}"\n`;
+        let isPass = rate >= 80.0;
+        let evalText = isPass 
+          ? `ผ่านเกณฑ์ (${rate}%)` 
+          : `⚠️ ติด มส. (${rate}%)`;
+
+        excelHtml += `
+          <tr>
+            <td colspan="2" style="text-align:left;">${subj}</td>
+            <td>${st.total} คาบ</td><td>${st.present} คาบ</td><td>${st.absent + st.skip} คาบ</td>
+            <td><b>${evalText}</b></td>
+          </tr>`;
       }
-      if (!hasSubjects) csvContent += `"ไม่มีข้อมูลบันทึกรายวิชาในระบบ",-,-,-,-,-\n`;
-      csvContent += "\n";
+      if (!hasSubjects) {
+        excelHtml += `<tr><td colspan="6" style="color:#64748b;">ไม่มีข้อมูลบันทึกรายวิชาในระบบ</td></tr>`;
+      }
+
+      excelHtml += `
+            <tr><td colspan="6" class="no-border" style="height:10px;"></td></tr>
+            <!-- หมวด 3: ประวัติข้อบกพร่อง -->
+            <tr><td colspan="6" class="section-title">3. ประวัติบันทึกการขาดเรียน / หนีเรียน</td></tr>
+            <tr style="background-color: #f8fafc; font-weight:bold;">
+              <td>ลำดับ</td><td>วันที่ / เวลา บันทึก</td><td>คาบเรียน</td><td colspan="2">ชื่อรายวิชา / กิจกรรม</td><td>สถานะ</td>
+            </tr>`;
 
       let problemRecords = studentRecords.filter(r => r.status === 'ขาด' || r.status === 'ขาดเรียน' || r.status === 'หนีเรียน');
-      csvContent += "[ หมวดที่ 3: ประวัติบันทึกข้อบกพร่อง (การขาดเรียน / หนีเรียน) ]\n";
-      csvContent += "ลำดับที่, วันที่ / เวลา บันทึก, ช่วงเวลา / คาบเรียน, ชื่อรายวิชา / กิจกรรม, สถานะการเช็คชื่อ\n";
-
       if (problemRecords.length === 0) {
-        csvContent += `"-","ไม่พบประวัติการขาดหรือหนีเรียนในระบบ","-","-","-\n`;
+        excelHtml += `<tr><td colspan="6">ไม่พบประวัติการขาดหรือหนีเรียนในระบบ</td></tr>`;
       } else {
         problemRecords.forEach((pr, idx) => {
-          csvContent += `"${idx + 1}","${pr.date}","${pr.session}","${pr.subject}","${pr.status}"\n`;
+          excelHtml += `
+            <tr>
+              <td>${idx + 1}</td><td>${pr.date}</td><td>${pr.session}</td>
+              <td colspan="2" style="text-align:left;">${pr.subject}</td>
+              <td><b>${pr.status}</b></td>
+            </tr>`;
         });
       }
-      csvContent += "\n";
 
-      csvContent += "====================================================================================================\n";
-      csvContent += "                                          การรับรองข้อมูล                                          \n";
-      csvContent += "====================================================================================================\n\n";
-      csvContent += 'ลงชื่อ.................................................... ครูประจำชั้น / ครูผู้สอน\n';
-      csvContent += '     (....................................................)\n';
-      csvContent += '     วันที่ ..... เดือน .................... พ.ศ. .........\n';
+      excelHtml += `
+            <tr><td colspan="6" class="no-border" style="height:20px;"></td></tr>
+            
+            <!-- 📌 ท้ายเอกสาร: จัดวางระยะการลงชื่อชิดซ้ายคอลัมน์และไม่เว้นบรรทัดตรงตามแบบ -->
+            <tr>
+              <td colspan="3" class="sign-cell">
+                ลงชื่อ.................................................... ครูประจำชั้น/ครูผู้สอน<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(....................................................)<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;วันที่ ..... เดือน .................... พ.ศ. .........
+              </td>
+              <td colspan="3" class="sign-cell">
+                ลงชื่อ.................................................... ฝ่ายกิจการนักเรียน/ผู้บริหาร<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(....................................................)<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;วันที่ ..... เดือน .................... พ.ศ. .........
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>`;
 
-      let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      let blob = new Blob([excelHtml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
       let link = document.createElement("a");
       let url = URL.createObjectURL(blob);
       link.setAttribute("href", url);
-      link.setAttribute("download", `รายงานสถิติรายบุคคล_${activeModalStudentName}_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `รายงานสถิติรายบุคคล_${activeModalStudentName}_${new Date().toISOString().slice(0,10)}.xls`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
